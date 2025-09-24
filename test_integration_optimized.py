@@ -1,6 +1,10 @@
 """
 Optimized Integration test for HowYouSeeMe Phase 1 components
-High-performance version with reduced computational overhead
+High-performance version with CUDA acceleration and intelligent frame dropping
+- CUDA pipeline for maximum hardware acceleration
+- Intelligent frame dropping for stability
+- Optimized processing intervals for efficiency
+- Reduced computational overhead
 """
 
 import sys
@@ -52,10 +56,13 @@ class OptimizedHowYouSeeMeIntegration:
         logger.info("Initializing optimized HowYouSeeMe components...")
         
         try:
-            # Initialize Kinect interface
+            # Initialize Kinect interface with CUDA for maximum performance
             self.kinect = KinectV2Interface(
                 use_modern=True,
-                preferred_pipeline="opengl"  # Force OpenGL for best performance
+                preferred_pipeline="cuda",   # Force CUDA for maximum performance
+                target_fps=20,               # Higher target FPS
+                max_frame_age_ms=75,         # Tighter frame age limit
+                enable_frame_dropping=True   # Enable intelligent frame dropping
             )
             if not self.kinect.start():
                 logger.error("Failed to initialize Kinect")

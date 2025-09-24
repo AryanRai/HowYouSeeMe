@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/test_modern_performance.dir/link.d CMakeFiles/test_modern_performance.dir/test_cpp_performance.cpp.o -o test_modern_performance  -Wl,-rpath,/home/aryan/libfreenect2-modern/lib /home/aryan/libfreenect2-modern/lib/libfreenect2.so -lpthread

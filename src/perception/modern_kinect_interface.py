@@ -37,13 +37,17 @@ class ModernKinectInterface:
     - Automatic pipeline selection
     - Thread-safe frame acquisition
     - Proper resource management
+    - Intelligent frame dropping for performance
     """
     
     def __init__(self, 
                  preferred_pipeline: str = "auto",
                  enable_rgb: bool = True,
                  enable_depth: bool = True,
-                 enable_ir: bool = False):
+                 enable_ir: bool = False,
+                 enable_frame_dropping: bool = True,
+                 max_frame_age_ms: float = 100.0,
+                 target_fps: float = 15.0):
         """
         Initialize modern Kinect interface
         
@@ -52,11 +56,20 @@ class ModernKinectInterface:
             enable_rgb: Enable RGB stream
             enable_depth: Enable depth stream  
             enable_ir: Enable IR stream
+            enable_frame_dropping: Enable intelligent frame dropping
+            max_frame_age_ms: Maximum age of frames before dropping (ms)
+            target_fps: Target FPS for frame dropping logic
         """
         self.preferred_pipeline = preferred_pipeline
         self.enable_rgb = enable_rgb
         self.enable_depth = enable_depth
         self.enable_ir = enable_ir
+        
+        # Frame dropping configuration
+        self.enable_frame_dropping = enable_frame_dropping
+        self.max_frame_age_ms = max_frame_age_ms
+        self.target_fps = target_fps
+        self.min_frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
         
         # Kinect objects (initialized in start())
         self.fn = None
@@ -64,14 +77,20 @@ class ModernKinectInterface:
         self.listener = None
         self.pipeline = None
         
-        # Frame management
-        self.frame_queue = queue.Queue(maxsize=5)
+        # Frame management with dropping logic
+        self.frame_queue = queue.Queue(maxsize=10)  # Larger queue for dropping
         self.frame_count = 0
+        self.dropped_frame_count = 0
         self.is_streaming = False
+        self.last_frame_time = 0.0
         
         # Threading
         self._capture_thread = None
         self._stop_event = threading.Event()
+        
+        # Performance tracking
+        self.frame_times = []
+        self.processing_times = []
         
         # Kinect v2 specifications
         self.rgb_width = 1920
@@ -156,12 +175,16 @@ class ModernKinectInterface:
         # Pipeline preference order (fastest to slowest) - check availability first
         pipeline_order = []
         
+        # Check for CUDA support (may not be available in all builds)
         if hasattr(pylibfreenect2, 'CudaPacketPipeline'):
             pipeline_order.append(('cuda', pylibfreenect2.CudaPacketPipeline))
+        # Check for OpenCL support
         if hasattr(pylibfreenect2, 'OpenCLPacketPipeline'):
             pipeline_order.append(('opencl', pylibfreenect2.OpenCLPacketPipeline))
+        # OpenGL is usually available and provides good GPU acceleration
         if hasattr(pylibfreenect2, 'OpenGLPacketPipeline'):
             pipeline_order.append(('opengl', pylibfreenect2.OpenGLPacketPipeline))
+        # CPU fallback
         if hasattr(pylibfreenect2, 'CpuPacketPipeline'):
             pipeline_order.append(('cpu', pylibfreenect2.CpuPacketPipeline))
         
@@ -277,7 +300,7 @@ class ModernKinectInterface:
         logger.info("✅ Kinect v2 streaming stopped")
     
     def _capture_loop(self):
-        """Main capture loop with working frame capture"""
+        """Main capture loop with intelligent frame dropping"""
         import pylibfreenect2
         
         try:
@@ -290,11 +313,21 @@ class ModernKinectInterface:
                     continue
                 
                 try:
+                    current_time = time.time()
+                    
+                    # Frame dropping logic
+                    if self.enable_frame_dropping:
+                        # Check if we should drop this frame based on timing
+                        if self._should_drop_frame(current_time):
+                            self.dropped_frame_count += 1
+                            continue
+                    
                     # Create frame data
                     frame_data = KinectFrame()
-                    frame_data.timestamp = time.time()
+                    frame_data.timestamp = current_time
                     frame_data.frame_id = self.frame_count
                     self.frame_count += 1
+                    self.last_frame_time = current_time
                     
                     # Extract RGB frame using integer frame type (Color = 1)
                     if self.enable_rgb:
@@ -330,16 +363,8 @@ class ModernKinectInterface:
                     
                     # Only queue frames that have data
                     if frame_data.rgb is not None or frame_data.depth is not None or frame_data.ir is not None:
-                        # Put frame in queue (non-blocking)
-                        try:
-                            self.frame_queue.put_nowait(frame_data)
-                        except queue.Full:
-                            # Drop oldest frame
-                            try:
-                                self.frame_queue.get_nowait()
-                                self.frame_queue.put_nowait(frame_data)
-                            except queue.Empty:
-                                pass
+                        # Intelligent queue management with frame dropping
+                        self._queue_frame_with_dropping(frame_data)
                     
                 finally:
                     # Always release frames
@@ -348,24 +373,146 @@ class ModernKinectInterface:
         except Exception as e:
             logger.error(f"Capture loop error: {e}")
     
+    def _should_drop_frame(self, current_time: float) -> bool:
+        """Determine if current frame should be dropped based on timing and queue state"""
+        # Check minimum frame interval (target FPS)
+        if self.last_frame_time > 0:
+            time_since_last = current_time - self.last_frame_time
+            if time_since_last < self.min_frame_interval:
+                return True
+        
+        # Check queue fullness - drop if queue is getting full
+        queue_size = self.frame_queue.qsize()
+        if queue_size > 7:  # Drop if queue > 70% full
+            return True
+        
+        return False
+    
+    def _queue_frame_with_dropping(self, frame_data: KinectFrame):
+        """Queue frame with intelligent dropping logic"""
+        current_time = time.time()
+        
+        # Clean old frames from queue first
+        self._clean_old_frames(current_time)
+        
+        try:
+            # Try to put frame in queue
+            self.frame_queue.put_nowait(frame_data)
+        except queue.Full:
+            # Queue is full - implement dropping strategy
+            dropped_count = 0
+            
+            # Drop oldest frames until we have space or queue is empty
+            while not self.frame_queue.empty() and dropped_count < 5:
+                try:
+                    old_frame = self.frame_queue.get_nowait()
+                    dropped_count += 1
+                    self.dropped_frame_count += 1
+                except queue.Empty:
+                    break
+            
+            # Try to queue the new frame again
+            try:
+                self.frame_queue.put_nowait(frame_data)
+            except queue.Full:
+                # Still full, drop this frame
+                self.dropped_frame_count += 1
+    
+    def _clean_old_frames(self, current_time: float):
+        """Remove frames that are too old from the queue"""
+        if not self.enable_frame_dropping:
+            return
+        
+        max_age_seconds = self.max_frame_age_ms / 1000.0
+        frames_to_keep = []
+        dropped_count = 0
+        
+        # Check all frames in queue
+        while not self.frame_queue.empty():
+            try:
+                frame = self.frame_queue.get_nowait()
+                frame_age = current_time - frame.timestamp
+                
+                if frame_age <= max_age_seconds:
+                    frames_to_keep.append(frame)
+                else:
+                    dropped_count += 1
+                    self.dropped_frame_count += 1
+            except queue.Empty:
+                break
+        
+        # Put back the frames we want to keep
+        for frame in frames_to_keep:
+            try:
+                self.frame_queue.put_nowait(frame)
+            except queue.Full:
+                # If queue is full, drop the oldest frames
+                self.dropped_frame_count += 1
+    
     def get_frame(self) -> Optional[KinectFrame]:
-        """Get the latest frame"""
+        """Get the latest frame with age checking"""
         if not self.is_streaming:
             logger.warning("Not streaming - call start_streaming() first")
             return None
         
+        current_time = time.time()
+        
+        # Clean old frames first
+        if self.enable_frame_dropping:
+            self._clean_old_frames(current_time)
+        
         try:
-            return self.frame_queue.get_nowait()
+            frame = self.frame_queue.get_nowait()
+            
+            # Check if frame is too old
+            if self.enable_frame_dropping:
+                frame_age = current_time - frame.timestamp
+                max_age_seconds = self.max_frame_age_ms / 1000.0
+                
+                if frame_age > max_age_seconds:
+                    self.dropped_frame_count += 1
+                    return None
+            
+            return frame
         except queue.Empty:
             return None
     
+    def get_latest_frame(self) -> Optional[KinectFrame]:
+        """Get the most recent frame, dropping all older ones"""
+        if not self.is_streaming:
+            return None
+        
+        latest_frame = None
+        dropped_count = 0
+        
+        # Get all frames and keep only the latest
+        while True:
+            try:
+                frame = self.frame_queue.get_nowait()
+                if latest_frame is not None:
+                    dropped_count += 1
+                latest_frame = frame
+            except queue.Empty:
+                break
+        
+        self.dropped_frame_count += dropped_count
+        return latest_frame
+    
     def get_camera_info(self) -> Dict[str, Any]:
-        """Get camera calibration information"""
-        available_pipelines = self.get_available_pipelines()
+        """Get camera calibration information and performance stats"""
+        # Only get available pipelines if not streaming to avoid creating new instances
+        if not self.is_streaming:
+            available_pipelines = self.get_available_pipelines()
+        else:
+            available_pipelines = ['unknown']  # Don't check while streaming
         
         current_pipeline = 'None'
         if self.pipeline:
             current_pipeline = self.pipeline.__class__.__name__
+        
+        # Calculate frame dropping statistics
+        total_frames = self.frame_count + self.dropped_frame_count
+        drop_rate = (self.dropped_frame_count / total_frames * 100) if total_frames > 0 else 0.0
         
         return {
             'rgb_intrinsics': self.rgb_intrinsics,
@@ -373,7 +520,13 @@ class ModernKinectInterface:
             'available_pipelines': available_pipelines,
             'current_pipeline': current_pipeline,
             'streaming': self.is_streaming,
-            'frame_count': self.frame_count
+            'frame_count': self.frame_count,
+            'dropped_frame_count': self.dropped_frame_count,
+            'drop_rate_percent': drop_rate,
+            'frame_dropping_enabled': self.enable_frame_dropping,
+            'target_fps': self.target_fps,
+            'max_frame_age_ms': self.max_frame_age_ms,
+            'queue_size': self.frame_queue.qsize()
         }
     
     def is_connected(self) -> bool:

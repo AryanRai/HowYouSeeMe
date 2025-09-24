@@ -32,12 +32,19 @@ class KinectV2Interface:
     
     This class now uses the modern pylibfreenect2-py310 bindings when available,
     with fallback to the legacy implementation for compatibility.
+    Features intelligent frame dropping for performance optimization.
     """
     
-    def __init__(self, device_id: int = 0, use_modern: bool = True, preferred_pipeline: str = "auto"):
+    def __init__(self, device_id: int = 0, use_modern: bool = True, preferred_pipeline: str = "auto",
+                 enable_frame_dropping: bool = True, target_fps: float = 20.0, max_frame_age_ms: float = 75.0):
         self.device_id = device_id
         self.use_modern = use_modern and MODERN_KINECT_AVAILABLE
         self.preferred_pipeline = preferred_pipeline
+        
+        # Frame dropping configuration
+        self.enable_frame_dropping = enable_frame_dropping
+        self.target_fps = target_fps
+        self.max_frame_age_ms = max_frame_age_ms
         
         # Initialize the appropriate interface
         if self.use_modern:
@@ -46,7 +53,10 @@ class KinectV2Interface:
                 preferred_pipeline=preferred_pipeline,
                 enable_rgb=True,
                 enable_depth=True,
-                enable_ir=False
+                enable_ir=False,
+                enable_frame_dropping=enable_frame_dropping,
+                target_fps=target_fps,
+                max_frame_age_ms=max_frame_age_ms
             )
             # Get intrinsics from modern interface
             camera_info = self.modern_kinect.get_camera_info()
@@ -312,6 +322,50 @@ class KinectV2Interface:
             depth_frame = self.get_depth_frame()
             return rgb_frame, depth_frame
     
+    def get_frames(self) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Dict[str, Any]]:
+        """
+        Get RGB and depth frames with performance info
+        Returns: (rgb_frame, depth_frame, info_dict)
+        """
+        rgb_data, depth_data = self.get_synchronized_frames()
+        
+        # Extract frames
+        rgb_frame = rgb_data['frame'] if rgb_data else None
+        depth_frame = depth_data['frame'] if depth_data else None
+        
+        # Get performance info
+        info = self.get_performance_info()
+        
+        return rgb_frame, depth_frame, info
+    
+    def get_performance_info(self) -> Dict[str, Any]:
+        """Get performance and frame dropping statistics"""
+        if self.use_modern and self.modern_kinect:
+            # Get stats directly from the modern kinect interface without creating new instances
+            total_frames = self.modern_kinect.frame_count + self.modern_kinect.dropped_frame_count
+            drop_rate = (self.modern_kinect.dropped_frame_count / total_frames * 100) if total_frames > 0 else 0.0
+            
+            return {
+                'dropped_frame_count': self.modern_kinect.dropped_frame_count,
+                'drop_rate_percent': drop_rate,
+                'frame_count': self.modern_kinect.frame_count,
+                'queue_size': self.modern_kinect.frame_queue.qsize(),
+                'target_fps': self.modern_kinect.target_fps,
+                'max_frame_age_ms': self.modern_kinect.max_frame_age_ms,
+                'frame_dropping_enabled': self.modern_kinect.enable_frame_dropping
+            }
+        else:
+            # Legacy implementation - basic stats
+            return {
+                'dropped_frame_count': 0,
+                'drop_rate_percent': 0.0,
+                'frame_count': 0,
+                'queue_size': 0,
+                'target_fps': self.target_fps,
+                'max_frame_age_ms': self.max_frame_age_ms,
+                'frame_dropping_enabled': self.enable_frame_dropping
+            }
+
     def get_camera_info(self) -> Dict[str, Any]:
         """Get camera calibration information"""
         if self.use_modern and self.modern_kinect:
