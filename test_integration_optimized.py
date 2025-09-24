@@ -1,6 +1,6 @@
 """
-Integration test for HowYouSeeMe Phase 1 components
-Tests Kinect interface, SLAM, and object detection together
+Optimized Integration test for HowYouSeeMe Phase 1 components
+High-performance version with reduced computational overhead
 """
 
 import sys
@@ -24,29 +24,38 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class HowYouSeeMeIntegration:
-    """Integration test class for Phase 1 components"""
+class OptimizedHowYouSeeMeIntegration:
+    """Optimized integration test class for Phase 1 components"""
     
     def __init__(self):
         self.kinect = None
         self.slam = None
         self.detector = None
-        self.resource_manager = ResourceManager(max_gpu_memory_gb=4.0, max_concurrent_models=2)
+        self.resource_manager = ResourceManager(max_gpu_memory_gb=4.0, max_concurrent_models=1)
         
         # Statistics
         self.frame_count = 0
         self.start_time = time.time()
         self.processing_times = []
         
+        # Performance optimization settings
+        self.detection_interval = 10  # Run detection every 10th frame
+        self.slam_interval = 2       # Run SLAM every 2nd frame
+        self.visualization_interval = 3  # Update visualization every 3rd frame
+        
+        # Cached results
+        self.last_detections = []
+        self.last_slam_result = None
+        
     def initialize_components(self) -> bool:
         """Initialize all perception components"""
-        logger.info("Initializing HowYouSeeMe components...")
+        logger.info("Initializing optimized HowYouSeeMe components...")
         
         try:
-            # Initialize Kinect interface (modern pylibfreenect2-py310)
+            # Initialize Kinect interface
             self.kinect = KinectV2Interface(
                 use_modern=True,
-                preferred_pipeline="auto"  # Will choose best available (OpenGL, CPU, etc.)
+                preferred_pipeline="opengl"  # Force OpenGL for best performance
             )
             if not self.kinect.start():
                 logger.error("Failed to initialize Kinect")
@@ -58,14 +67,14 @@ class HowYouSeeMeIntegration:
             camera_info = self.kinect.get_camera_info()
             rgb_intrinsics = camera_info['rgb_intrinsics']
             
-            # Initialize SLAM
+            # Initialize SLAM with reduced features
             self.slam = BasicSLAM(rgb_intrinsics)
             logger.info("SLAM initialized")
             
-            # Initialize object detector
+            # Initialize object detector with optimized settings
             self.detector = YOLODetector(
-                model_name="yolov5s",
-                confidence_threshold=0.5,
+                model_name="yolov5n",  # Use nano model for speed
+                confidence_threshold=0.6,  # Higher threshold for fewer false positives
                 resource_manager=self.resource_manager
             )
             logger.info("Object detector initialized")
@@ -77,21 +86,30 @@ class HowYouSeeMeIntegration:
             return False
     
     def process_frame(self, rgb_frame: np.ndarray, depth_frame: np.ndarray = None) -> Dict[str, Any]:
-        """Process a single frame through the perception pipeline"""
+        """Process a single frame through the optimized perception pipeline"""
         start_time = time.time()
         
-        # SLAM processing (every frame)
-        slam_result = self.slam.process_frame(rgb_frame, depth_frame)
+        # SLAM processing (every slam_interval frames)
+        if self.frame_count % self.slam_interval == 0:
+            self.last_slam_result = self.slam.process_frame(rgb_frame, depth_frame)
         
-        # Object detection (every 5th frame to improve performance)
-        detections = []
-        if self.frame_count % 5 == 0:
-            detections = self.detector.detect_objects(rgb_frame)
+        slam_result = self.last_slam_result or {
+            'keypoints': [],
+            'is_tracking': False,
+            'num_features': 0,
+            'pose': None
+        }
+        
+        # Object detection (every detection_interval frames)
+        if self.frame_count % self.detection_interval == 0:
+            self.last_detections = self.detector.detect_objects(rgb_frame)
+        
+        detections = self.last_detections
         
         # Calculate processing time
         processing_time = time.time() - start_time
         self.processing_times.append(processing_time)
-        if len(self.processing_times) > 100:
+        if len(self.processing_times) > 50:  # Smaller buffer
             self.processing_times.pop(0)
         
         return {
@@ -102,79 +120,63 @@ class HowYouSeeMeIntegration:
         }
     
     def visualize_results(self, frame: np.ndarray, results: Dict[str, Any]) -> np.ndarray:
-        """Create visualization of all processing results"""
+        """Create lightweight visualization of processing results"""
+        # Only update visualization every visualization_interval frames
+        if self.frame_count % self.visualization_interval != 0:
+            return frame
+        
         vis_frame = frame.copy()
         
-        # Draw SLAM features
+        # Draw SLAM features (reduced)
         slam_result = results['slam']
-        if slam_result['keypoints']:
-            vis_frame = cv2.drawKeypoints(vis_frame, slam_result['keypoints'], None, 
-                                        color=(0, 255, 255), flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        if slam_result and slam_result.get('keypoints'):
+            keypoints = slam_result['keypoints'][:100]  # Limit to 100 keypoints for performance
+            for kp in keypoints:
+                x, y = int(kp.pt[0]), int(kp.pt[1])
+                cv2.circle(vis_frame, (x, y), 2, (0, 255, 255), -1)
         
         # Draw object detections
         detections = results['detections']
-        vis_frame = self.detector.visualize_detections(vis_frame, detections)
+        for det in detections:
+            x, y, w, h = det.bbox
+            cv2.rectangle(vis_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            
+            # Simple label
+            label = f"{det.class_name}: {det.confidence:.2f}"
+            cv2.putText(vis_frame, label, (x, y - 5), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
         
-        # Add status information
-        self._add_status_overlay(vis_frame, results)
+        # Add lightweight status overlay
+        self._add_lightweight_status(vis_frame, results)
         
         return vis_frame
     
-    def _add_status_overlay(self, frame: np.ndarray, results: Dict[str, Any]):
-        """Add status information overlay to frame"""
+    def _add_lightweight_status(self, frame: np.ndarray, results: Dict[str, Any]):
+        """Add lightweight status information overlay"""
         slam_result = results['slam']
         detections = results['detections']
         
-        # Background for text
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (10, 10), (400, 200), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
-        
-        # Text information
-        y_offset = 30
-        line_height = 25
-        
-        # FPS and timing
+        # Calculate FPS
         elapsed = time.time() - self.start_time
         fps = self.frame_count / elapsed if elapsed > 0 else 0
-        avg_processing = np.mean(self.processing_times) if self.processing_times else 0
         
-        cv2.putText(frame, f"FPS: {fps:.1f}", (15, y_offset), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-        y_offset += line_height
+        # Simple status text
+        status_lines = [
+            f"FPS: {fps:.1f}",
+            f"SLAM: {'OK' if slam_result and slam_result.get('is_tracking') else 'LOST'}",
+            f"Objects: {len(detections)}"
+        ]
         
-        cv2.putText(frame, f"Processing: {avg_processing*1000:.1f}ms", (15, y_offset), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
-        y_offset += line_height
-        
-        # SLAM status
-        slam_status = "TRACKING" if slam_result['is_tracking'] else "LOST"
-        slam_color = (0, 255, 0) if slam_result['is_tracking'] else (0, 0, 255)
-        cv2.putText(frame, f"SLAM: {slam_status}", (15, y_offset), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, slam_color, 1)
-        y_offset += line_height
-        
-        cv2.putText(frame, f"Features: {slam_result['num_features']}", (15, y_offset), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-        y_offset += line_height
-        
-        # Detection info
-        cv2.putText(frame, f"Objects: {len(detections)}", (15, y_offset), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-        y_offset += line_height
-        
-        # Show detected classes
-        if detections:
-            classes = list(set([det.class_name for det in detections]))
-            class_text = ", ".join(classes[:3])  # Show first 3 classes
-            if len(classes) > 3:
-                class_text += "..."
-            cv2.putText(frame, f"Classes: {class_text}", (15, y_offset), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        # Draw status with minimal overhead
+        y_offset = 30
+        for line in status_lines:
+            cv2.putText(frame, line, (10, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            y_offset += 25
     
     def run_test(self, max_frames: int = 1000, show_visualization: bool = True):
-        """Run the integration test"""
-        logger.info(f"Starting integration test for {max_frames} frames...")
+        """Run the optimized integration test"""
+        logger.info(f"Starting optimized integration test for {max_frames} frames...")
         
         if not self.initialize_components():
             logger.error("Failed to initialize components")
@@ -185,33 +187,28 @@ class HowYouSeeMeIntegration:
                 # Get frame from Kinect
                 rgb_data, depth_data = self.kinect.get_synchronized_frames()
                 if rgb_data is None:
-                    time.sleep(0.01)
+                    time.sleep(0.001)  # Minimal sleep
                     continue
                 
                 rgb_frame = rgb_data['frame']
                 depth_frame = depth_data['frame'] if depth_data else None
                 
-                # Process frame through pipeline
+                # Process frame through optimized pipeline
                 results = self.process_frame(rgb_frame, depth_frame)
                 
                 # Update frame count
                 self.frame_count += 1
                 
-                # Log progress
-                if self.frame_count % 30 == 0:
+                # Log progress less frequently
+                if self.frame_count % 60 == 0:  # Every 60 frames
                     self._log_progress(results)
                 
-                # Visualization
-                if show_visualization:
+                # Lightweight visualization
+                if show_visualization and self.frame_count % self.visualization_interval == 0:
                     vis_frame = self.visualize_results(rgb_frame, results)
-                    cv2.imshow('HowYouSeeMe Integration Test', vis_frame)
+                    cv2.imshow('HowYouSeeMe Optimized Test', vis_frame)
                     
-                    # Show SLAM trajectory
-                    if self.slam:
-                        traj_img = self.slam.visualize_trajectory()
-                        cv2.imshow('SLAM Trajectory', traj_img)
-                    
-                    # Check for quit
+                    # Non-blocking key check
                     key = cv2.waitKey(1) & 0xFF
                     if key == ord('q'):
                         break
@@ -219,8 +216,6 @@ class HowYouSeeMeIntegration:
                         if self.slam:
                             self.slam.reset()
                         logger.info("SLAM reset")
-                
-                # No artificial delay - let it run at full speed
             
             # Final statistics
             self._print_final_stats()
@@ -242,16 +237,12 @@ class HowYouSeeMeIntegration:
         
         elapsed = time.time() - self.start_time
         fps = self.frame_count / elapsed
+        avg_processing = np.mean(self.processing_times) if self.processing_times else 0
         
         logger.info(f"Frame {self.frame_count}: FPS={fps:.1f}, "
-                   f"SLAM={'OK' if slam_result['is_tracking'] else 'LOST'}, "
-                   f"Features={slam_result['num_features']}, "
+                   f"Processing={avg_processing*1000:.1f}ms, "
+                   f"SLAM={'OK' if slam_result and slam_result.get('is_tracking') else 'LOST'}, "
                    f"Objects={len(detections)}")
-        
-        # Show detected objects
-        if detections:
-            for det in detections[:3]:  # Show first 3
-                logger.info(f"  - {det.class_name}: {det.confidence:.2f}")
     
     def _print_final_stats(self):
         """Print final test statistics"""
@@ -260,20 +251,19 @@ class HowYouSeeMeIntegration:
         avg_processing = np.mean(self.processing_times) if self.processing_times else 0
         
         print("\n" + "="*50)
-        print("INTEGRATION TEST RESULTS")
+        print("OPTIMIZED INTEGRATION TEST RESULTS")
         print("="*50)
         print(f"Total frames processed: {self.frame_count}")
         print(f"Total time: {elapsed:.2f} seconds")
         print(f"Average FPS: {avg_fps:.2f}")
         print(f"Average processing time: {avg_processing*1000:.2f}ms")
-        
-        if self.slam:
-            trajectory = self.slam.get_trajectory()
-            print(f"SLAM trajectory points: {len(trajectory)}")
+        print(f"Detection interval: every {self.detection_interval} frames")
+        print(f"SLAM interval: every {self.slam_interval} frames")
         
         if self.detector:
             det_stats = self.detector.get_performance_stats()
-            print(f"Detection stats: {det_stats}")
+            if det_stats:
+                print(f"Detection FPS estimate: {det_stats.get('fps_estimate', 0):.1f}")
         
         print("="*50)
     
@@ -292,27 +282,28 @@ class HowYouSeeMeIntegration:
 
 def main():
     """Main test function"""
-    print("HowYouSeeMe Phase 1 Integration Test")
-    print("====================================")
-    print("This test integrates:")
-    print("- Kinect v2 sensor interface")
-    print("- Basic SLAM with ORB features")
-    print("- YOLO object detection")
+    print("HowYouSeeMe Optimized Integration Test")
+    print("=====================================")
+    print("This optimized test features:")
+    print("- Reduced computational overhead")
+    print("- Selective processing intervals")
+    print("- Lightweight visualization")
+    print("- YOLOv5n (nano) for speed")
     print()
     print("Controls:")
     print("- 'q': quit test")
     print("- 'r': reset SLAM")
     print()
     
-    # Create and run test
-    test = HowYouSeeMeIntegration()
+    # Create and run optimized test
+    test = OptimizedHowYouSeeMeIntegration()
     
     try:
-        success = test.run_test(max_frames=500, show_visualization=True)
+        success = test.run_test(max_frames=1000, show_visualization=True)
         if success:
-            print("Integration test completed successfully!")
+            print("Optimized integration test completed successfully!")
         else:
-            print("Integration test failed!")
+            print("Optimized integration test failed!")
     except Exception as e:
         print(f"Test error: {e}")
         logger.error(f"Test error: {e}")

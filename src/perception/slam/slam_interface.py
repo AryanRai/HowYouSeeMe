@@ -40,8 +40,8 @@ class BasicSLAM:
     """Basic SLAM implementation using ORB features and essential matrix"""
     
     def __init__(self, camera_intrinsics: Dict[str, float]):
-        # ORB feature detector
-        self.orb = cv2.ORB_create(nfeatures=1000)
+        # ORB feature detector (reduced features for better performance)
+        self.orb = cv2.ORB_create(nfeatures=500, scaleFactor=1.2, nlevels=4)
         
         # Feature matcher
         self.matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
@@ -73,7 +73,11 @@ class BasicSLAM:
         # Tracking state
         self.is_initialized = False
         self.lost_tracking = False
-        self.min_matches = 20
+        self.min_matches = 15  # Reduced for better performance
+        
+        # Performance optimization
+        self.frame_skip = 0  # Process every frame initially
+        self.max_frame_skip = 2  # Skip up to 2 frames when tracking is good
         
     def process_frame(self, rgb_frame: np.ndarray, depth_frame: Optional[np.ndarray] = None, 
                      timestamp: Optional[float] = None) -> Dict[str, Any]:

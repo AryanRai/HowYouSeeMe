@@ -121,7 +121,7 @@ class YOLODetector:
     def _load_model(self) -> bool:
         """Load YOLO model with resource management"""
         with self.load_lock:
-            if self.model_loaded:
+            if self.model_loaded and self.model is not None:
                 return True
             
             # Check if model is already loaded by resource manager
@@ -139,15 +139,16 @@ class YOLODetector:
             try:
                 logger.info(f"Loading {self.model_name}...")
                 
-                # Load YOLOv5 model from torch hub
-                self.model = torch.hub.load('ultralytics/yolov5', self.model_name, 
-                                          pretrained=True, verbose=False)
-                self.model.to(self.device)
-                self.model.eval()
+                # Use ultralytics YOLO instead of torch.hub for better performance
+                from ultralytics import YOLO
                 
-                # Configure model
-                self.model.conf = self.confidence_threshold
-                self.model.iou = self.nms_threshold
+                # Load model (will cache locally after first download)
+                self.model = YOLO(f'{self.model_name}.pt')
+                
+                # Configure model for inference
+                self.model.overrides['conf'] = self.confidence_threshold
+                self.model.overrides['iou'] = self.nms_threshold
+                self.model.overrides['verbose'] = False
                 
                 # Register with resource manager
                 self.resource_manager.register_model(self.model_name, self.model)
@@ -179,33 +180,41 @@ class YOLODetector:
                 frame_roi = rgb_frame
                 offset_x, offset_y = 0, 0
             
-            # Run inference
-            results = self.model(frame_roi)
+            # Run inference with ultralytics YOLO
+            results = self.model(frame_roi, verbose=False)
             
-            # Parse results
+            # Parse results (ultralytics format)
             detections = []
-            for *box, conf, cls_id in results.xyxy[0].cpu().numpy():
-                if conf >= self.confidence_threshold:
-                    x1, y1, x2, y2 = map(int, box)
+            if results and len(results) > 0:
+                result = results[0]  # First (and only) image result
+                
+                if result.boxes is not None:
+                    boxes = result.boxes.xyxy.cpu().numpy()  # x1, y1, x2, y2
+                    confidences = result.boxes.conf.cpu().numpy()
+                    class_ids = result.boxes.cls.cpu().numpy()
                     
-                    # Adjust coordinates for ROI offset
-                    x1 += offset_x
-                    y1 += offset_y
-                    x2 += offset_x
-                    y2 += offset_y
-                    
-                    class_name = self.model.names[int(cls_id)]
-                    
-                    detection = Detection(
-                        bbox=[x1, y1, x2 - x1, y2 - y1],
-                        confidence=float(conf),
-                        class_name=class_name,
-                        class_id=int(cls_id),
-                        center=((x1 + x2) // 2, (y1 + y2) // 2),
-                        timestamp=time.time()
-                    )
-                    
-                    detections.append(detection)
+                    for i, (box, conf, cls_id) in enumerate(zip(boxes, confidences, class_ids)):
+                        if conf >= self.confidence_threshold:
+                            x1, y1, x2, y2 = map(int, box)
+                            
+                            # Adjust coordinates for ROI offset
+                            x1 += offset_x
+                            y1 += offset_y
+                            x2 += offset_x
+                            y2 += offset_y
+                            
+                            class_name = self.model.names[int(cls_id)]
+                            
+                            detection = Detection(
+                                bbox=[x1, y1, x2 - x1, y2 - y1],
+                                confidence=float(conf),
+                                class_name=class_name,
+                                class_id=int(cls_id),
+                                center=((x1 + x2) // 2, (y1 + y2) // 2),
+                                timestamp=time.time()
+                            )
+                            
+                            detections.append(detection)
             
             # Track performance
             inference_time = time.time() - start_time
