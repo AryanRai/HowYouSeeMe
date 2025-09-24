@@ -215,7 +215,7 @@ We welcome contributions! Please see our development plan and:
 
 ## 🆘 Support
 
-- **📧 Email**: [aryanrai170@gmail.com](mailto:aryanrai170@gmail.com)
+- **📧 Email**: [buzzaryanrai@gmail.com](mailto:aryanrai170@gmail.com)
 - **🐛 Issues**: [GitHub Issues](https://github.com/AryanRai/HowYouSeeMe/issues)
 - **📖 Documentation**: [docs/](docs/) folder for comprehensive guides
 - **💬 Discussions**: Join the DroidCore ecosystem discussions

@@ -43,6 +43,7 @@ source venv/bin/activate
 # Install basic Python dependencies
 pip install --upgrade pip
 pip install numpy opencv-python torch torchvision redis fastapi uvicorn
+pip install mediapipe  # For hand tracking
 ```
 
 ### Step 2: Kinect v2 Setup
@@ -77,7 +78,7 @@ LIBFREENECT2_PIPELINE=cuda ./bin/Protonect
 # Create core project structure
 cd /home/aryan/Documents/GitHub/HowYouSeeMe
 mkdir -p src/{perception,summarizer,mcp_integration}
-mkdir -p src/perception/{slam,detection,segmentation,face_analysis,vlm}
+mkdir -p src/perception/{slam,detection,segmentation,face_analysis,hand_tracking,vlm}
 mkdir -p src/summarizer/{fusion,nlg,memory}
 mkdir -p src/mcp_integration/{server,tools}
 mkdir -p tests/{unit,integration,e2e}

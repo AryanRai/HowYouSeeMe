@@ -94,6 +94,18 @@ HowYouSeeMe operates as part of the **DroidCore** robotics ecosystem:
   - ROI-based detailed descriptions
   - Visual question answering for complex queries
 
+- **Hand/Gesture Analysis**
+  - MediaPipe Hands for hand tracking
+  - Gesture recognition (pointing, grabbing, waving)
+  - Hand-object interaction detection
+  - Spatial pointing target analysis
+
+- **Enhanced Audio Processing**
+  - Sound source localization for multi-modal understanding
+  - Speaker identification/diarization for multi-person scenes
+  - Audio event detection (environmental sounds, actions)
+  - Audio-visual synchronization for comprehensive scene analysis
+
 #### 1.3 Vision-Language Model Integration
 - **Multimodal Understanding**: Image-text correspondence
 - **Scene Description**: Natural language scene summaries
@@ -101,21 +113,25 @@ HowYouSeeMe operates as part of the **DroidCore** robotics ecosystem:
 
 ### Technical Stack
 - **Language**: Python 3.8+ with asyncio for concurrent processing
-- **Computer Vision**: OpenCV, PyTorch, torchvision
+- **Computer Vision**: OpenCV, PyTorch, torchvision, MediaPipe
 - **SLAM**: ORB-SLAM3, OpenVSLAM, or RTAB-Map
 - **Object Detection**: YOLOv8/v9, Detectron2
 - **VLM Integration**: CLIP, BLIP, or LLaVA models
+- **Hand Tracking**: MediaPipe Hands, gesture recognition models
+- **Audio Processing**: librosa, pyaudio, scipy, speechrecognition
 - **Sensor Interface**: libfreenect2 bindings, ROS2 (optional)
 
 ### Data Flow
 ```
-Kinect v2 → RGB-D Stream → Preprocessing → 
+Kinect v2 → RGB-D + Audio Stream → Preprocessing → 
     ├─ SLAM → Pose/Map Data
     ├─ YOLO → Object Detections  
     ├─ Segmentation → Semantic Masks
+    ├─ Hand Tracking → Gesture Analysis
+    ├─ Audio Processing → Sound Events/Localization
     └─ VLM → Scene Descriptions
         ↓
-World State Data Structure
+Multi-Modal World State Data Structure
 ```
 
 ## Phase 2: World State Summarizer
@@ -241,8 +257,8 @@ async def spatial_reasoning_query(question: str):
 ### Phase 1: Foundation (Weeks 1-4)
 - [ ] **Week 1**: Set up project structure and basic Kinect v2 integration
 - [ ] **Week 2**: Implement basic computer vision pipeline (YOLO + basic SLAM)
-- [ ] **Week 3**: Add semantic segmentation and scene understanding
-- [ ] **Week 4**: Integrate VLM for scene descriptions
+- [ ] **Week 3**: Add semantic segmentation and hand tracking integration
+- [ ] **Week 4**: Integrate VLM for scene descriptions and enhanced audio processing
 
 ### Phase 2: Intelligence (Weeks 5-8)
 - [ ] **Week 5**: Design and implement world state data structure
@@ -275,6 +291,8 @@ async def spatial_reasoning_query(question: str):
 - **Python 3.8+**: Core development language
 - **PyTorch**: Deep learning framework
 - **OpenCV**: Computer vision operations
+- **MediaPipe**: Hand tracking and gesture recognition
+- **librosa**: Audio processing and analysis
 - **Redis**: Memory and caching system
 - **FastAPI**: High-performance web framework
 - **libfreenect2**: Kinect v2 driver
