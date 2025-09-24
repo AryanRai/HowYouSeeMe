@@ -1,0 +1,51 @@
+# HowYouSeeMe Dependencies
+
+# Core dependencies
+numpy>=1.21.0
+opencv-python>=4.5.0
+PyYAML>=6.0
+
+# Deep learning
+torch>=1.9.0
+torchvision>=0.10.0
+
+# Computer vision and ML
+ultralytics>=8.0.0  # For YOLOv8 (alternative to torch hub)
+
+# Hand tracking and pose estimation
+mediapipe>=0.8.0
+
+# Memory and caching
+redis>=4.0.0
+
+# Web framework for MCP server
+fastapi>=0.68.0
+uvicorn>=0.15.0
+websockets>=10.0
+
+# Audio processing
+librosa>=0.8.0
+pyaudio>=0.2.11
+scipy>=1.7.0
+
+# Utilities
+Pillow>=8.0.0
+tqdm>=4.62.0
+python-dotenv>=0.19.0
+
+# Development and testing
+pytest>=6.0.0
+pytest-asyncio>=0.15.0
+black>=21.0.0
+flake8>=3.9.0
+
+# Optional: For better SLAM (install separately if needed)
+# opencv-contrib-python>=4.5.0  # For additional OpenCV modules
+
+# Optional: For face recognition (install separately if needed)
+# face-recognition>=1.3.0
+# dlib>=19.22.0
+
+# Optional: For advanced NLP (install separately if needed)
+# transformers>=4.0.0
+# sentence-transformers>=2.0.0
