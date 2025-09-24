@@ -71,6 +71,33 @@ HowYouSeeMe operates as part of the **DroidCore** robotics ecosystem:
 - **Software**: Python 3.8+, GPU with CUDA support (recommended)
 - **System**: Ubuntu 20.04+ or equivalent Linux distribution
 
+### Usage Examples
+
+Once installed, you can run Protonect from anywhere:
+
+```bash
+# Basic usage with GUI viewer
+Protonect
+
+# Headless mode (no GUI)
+Protonect -noviewer
+
+# Specify processing pipeline
+Protonect cuda          # Use NVIDIA GPU acceleration
+Protonect cl            # Use OpenCL GPU acceleration  
+Protonect cpu           # Use CPU processing
+
+# Process limited frames
+Protonect -frames 100   # Process 100 frames then exit
+
+# Disable specific streams
+Protonect -norgb        # Disable RGB stream
+Protonect -nodepth      # Disable depth stream
+
+# Control and monitoring
+pkill -USR1 Protonect   # Pause/unpause processing
+```
+
 ### Basic Setup
 
 ```bash
@@ -88,16 +115,31 @@ sudo cp ../platform/linux/udev/90-kinect2.rules /etc/udev/rules.d/
 # Replug Kinect after this step
 ```
 
+### Install Protonect System-Wide
+
+```bash
+# Make Protonect available from anywhere on your system
+sudo ln -sf $(pwd)/libfreenect2/build/bin/Protonect /usr/local/bin/Protonect
+
+# Verify installation
+which Protonect  # Should show: /usr/local/bin/Protonect
+```
+
 ### Test Kinect Setup
 
 ```bash
-# Run basic test (requires Kinect v2 connected)
-cd libfreenect2/build
-./bin/Protonect
+# Run basic test from anywhere (requires Kinect v2 connected)
+Protonect --help
 
 # Test with specific pipeline (if you have GPU support)
-LIBFREENECT2_PIPELINE=cuda ./bin/Protonect  # NVIDIA GPU
-LIBFREENECT2_PIPELINE=cl ./bin/Protonect    # OpenCL GPU
+LIBFREENECT2_PIPELINE=cuda Protonect  # NVIDIA GPU
+LIBFREENECT2_PIPELINE=cl Protonect    # OpenCL GPU
+LIBFREENECT2_PIPELINE=cpu Protonect   # CPU fallback
+
+# Run with specific options
+Protonect -noviewer          # Run without GUI
+Protonect -frames 100        # Process only 100 frames
+Protonect gl                 # Force OpenGL pipeline
 ```
 
 ## 📚 Documentation

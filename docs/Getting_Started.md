@@ -64,12 +64,26 @@ make install
 sudo cp ../platform/linux/udev/90-kinect2.rules /etc/udev/rules.d/
 # Unplug and replug Kinect after this step
 
-# Test Kinect
+# Install Protonect system-wide for easy access
+sudo ln -sf $(pwd)/bin/Protonect /usr/local/bin/Protonect
+
+# Test Kinect (can now run from anywhere)
 export LD_LIBRARY_PATH=$HOME/freenect2/lib:$LD_LIBRARY_PATH
-./bin/Protonect
+Protonect --help
+
+# Test basic functionality
+Protonect
 
 # Test GPU acceleration (if available)
-LIBFREENECT2_PIPELINE=cuda ./bin/Protonect
+LIBFREENECT2_PIPELINE=cuda Protonect    # NVIDIA GPU
+LIBFREENECT2_PIPELINE=cl Protonect      # OpenCL GPU
+LIBFREENECT2_PIPELINE=cpu Protonect     # CPU fallback
+
+# Test without viewer (headless mode)
+Protonect -noviewer
+
+# Process specific number of frames
+Protonect -frames 100
 ```
 
 ### Step 3: Project Structure Setup
@@ -126,9 +140,30 @@ mcp:
 EOF
 ```
 
-### Step 4: Core Module Implementation
+### Step 4: Verify Protonect Installation
 
-#### 4.1 Basic Sensor Interface
+```bash
+# Test that Protonect works from any directory
+cd /tmp
+Protonect --version
+
+# Should output:
+# Version: 0.2.0
+# Environment variables: LOGFILE=<protonect.log>
+# Usage: Protonect [-gpu=<id>] [gl | cl | clkde | cuda | cudakde | cpu] [<device serial>]
+#         [-noviewer] [-norgb | -nodepth] [-help] [-version]
+#         [-frames <number of frames to process>]
+# To pause and unpause: pkill -USR1 Protonect
+
+# Test with Kinect connected (if available)
+cd ~/Documents/GitHub/HowYouSeeMe
+export LD_LIBRARY_PATH=$HOME/freenect2/lib:$LD_LIBRARY_PATH
+Protonect -frames 10  # Process 10 frames then exit
+```
+
+### Step 5: Core Module Implementation
+
+#### 5.1 Basic Sensor Interface
 
 ```python
 # src/perception/sensor_interface.py
@@ -233,7 +268,7 @@ if __name__ == "__main__":
         print("Failed to start Kinect")
 ```
 
-#### 4.2 Basic SLAM Integration
+#### 5.2 Basic SLAM Integration
 
 ```python
 # src/perception/slam/slam_interface.py
@@ -315,7 +350,7 @@ if __name__ == "__main__":
     cv2.destroyAllWindows()
 ```
 
-#### 4.3 Basic Object Detection
+#### 5.3 Basic Object Detection
 
 ```python
 # src/perception/detection/object_detector.py
@@ -415,7 +450,7 @@ if __name__ == "__main__":
     cv2.destroyAllWindows()
 ```
 
-### Step 5: Basic Integration Test
+### Step 6: Basic Integration Test
 
 Create a simple integration test to verify all components work together:
 
@@ -496,7 +531,7 @@ if __name__ == "__main__":
     main()
 ```
 
-### Step 6: Run the Test
+### Step 7: Run the Test
 
 ```bash
 # Activate environment and run integration test
