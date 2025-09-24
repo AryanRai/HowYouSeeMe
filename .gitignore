@@ -3,3 +3,11 @@
 /venv/bin
 /venv/share
 /venv
+*.pyc
+*.pt
+*.partial
+/src/perception/__pycache__
+/src/perception/__pycache__
+src/perception/__pycache__/sensor_interface.cpython-312.pyc
+*.pyc
+*.pyc

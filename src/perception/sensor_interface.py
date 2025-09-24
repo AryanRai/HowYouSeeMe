@@ -1,6 +1,6 @@
 """
 Kinect v2 Sensor Interface for HowYouSeeMe
-Provides RGB-D data acquisition using libfreenect2
+Provides RGB-D data acquisition using modern pylibfreenect2-py310
 """
 
 import cv2
@@ -13,40 +13,79 @@ import logging
 import subprocess
 import os
 
+# Try to import modern Kinect interface
+try:
+    from .modern_kinect_interface import ModernKinectInterface, KinectFrame
+    MODERN_KINECT_AVAILABLE = True
+except ImportError:
+    try:
+        from modern_kinect_interface import ModernKinectInterface, KinectFrame
+        MODERN_KINECT_AVAILABLE = True
+    except ImportError:
+        MODERN_KINECT_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 class KinectV2Interface:
-    """Kinect v2 interface for RGB-D data acquisition"""
+    """
+    Kinect v2 interface for RGB-D data acquisition
     
-    def __init__(self, device_id: int = 0, use_protonect: bool = True):
+    This class now uses the modern pylibfreenect2-py310 bindings when available,
+    with fallback to the legacy implementation for compatibility.
+    """
+    
+    def __init__(self, device_id: int = 0, use_modern: bool = True, preferred_pipeline: str = "auto"):
         self.device_id = device_id
-        self.use_protonect = use_protonect
-        self.rgb_queue = queue.Queue(maxsize=5)
-        self.depth_queue = queue.Queue(maxsize=5)
-        self.running = False
-        self.capture_thread = None
-        self.protonect_process = None
+        self.use_modern = use_modern and MODERN_KINECT_AVAILABLE
+        self.preferred_pipeline = preferred_pipeline
         
-        # Camera intrinsics (Kinect v2 defaults)
-        self.rgb_intrinsics = {
-            'fx': 1081.37, 'fy': 1081.37,
-            'cx': 959.5, 'cy': 539.5,
-            'width': 1920, 'height': 1080
-        }
-        
-        self.depth_intrinsics = {
-            'fx': 365.456, 'fy': 365.456,
-            'cx': 257.128, 'cy': 210.468,
-            'width': 512, 'height': 424
-        }
+        # Initialize the appropriate interface
+        if self.use_modern:
+            logger.info("Using modern pylibfreenect2-py310 interface")
+            self.modern_kinect = ModernKinectInterface(
+                preferred_pipeline=preferred_pipeline,
+                enable_rgb=True,
+                enable_depth=True,
+                enable_ir=False
+            )
+            # Get intrinsics from modern interface
+            camera_info = self.modern_kinect.get_camera_info()
+            self.rgb_intrinsics = camera_info['rgb_intrinsics']
+            self.depth_intrinsics = camera_info['depth_intrinsics']
+        else:
+            logger.info("Using legacy interface (modern pylibfreenect2 not available)")
+            self.modern_kinect = None
+            # Legacy setup
+            self.rgb_queue = queue.Queue(maxsize=5)
+            self.depth_queue = queue.Queue(maxsize=5)
+            self.running = False
+            self.capture_thread = None
+            self.protonect_process = None
+            
+            # Camera intrinsics (Kinect v2 defaults)
+            self.rgb_intrinsics = {
+                'fx': 1081.37, 'fy': 1081.37,
+                'cx': 959.5, 'cy': 539.5,
+                'width': 1920, 'height': 1080
+            }
+            
+            self.depth_intrinsics = {
+                'fx': 365.456, 'fy': 365.456,
+                'cx': 257.128, 'cy': 210.468,
+                'width': 512, 'height': 424
+            }
         
     def start(self) -> bool:
         """Start Kinect data capture"""
         try:
-            if self.use_protonect and self._check_protonect():
-                return self._start_protonect_capture()
+            if self.use_modern and self.modern_kinect:
+                return self.modern_kinect.start_streaming()
             else:
-                return self._start_opencv_capture()
+                # Legacy implementation
+                if self._check_protonect():
+                    return self._start_protonect_capture()
+                else:
+                    return self._start_opencv_capture()
                 
         except Exception as e:
             logger.error(f"Failed to start Kinect: {e}")
@@ -205,49 +244,111 @@ class KinectV2Interface:
     
     def get_rgb_frame(self) -> Optional[Dict]:
         """Get latest RGB frame"""
-        try:
-            return self.rgb_queue.get_nowait()
-        except queue.Empty:
+        if self.use_modern and self.modern_kinect:
+            frame = self.modern_kinect.get_frame()
+            if frame and frame.rgb is not None:
+                return {
+                    'frame': frame.rgb,
+                    'timestamp': frame.timestamp,
+                    'frame_id': frame.frame_id,
+                    'intrinsics': self.rgb_intrinsics
+                }
             return None
+        else:
+            # Legacy implementation
+            try:
+                return self.rgb_queue.get_nowait()
+            except queue.Empty:
+                return None
     
     def get_depth_frame(self) -> Optional[Dict]:
         """Get latest depth frame"""
-        try:
-            return self.depth_queue.get_nowait()
-        except queue.Empty:
+        if self.use_modern and self.modern_kinect:
+            frame = self.modern_kinect.get_frame()
+            if frame and frame.depth is not None:
+                return {
+                    'frame': frame.depth,
+                    'timestamp': frame.timestamp,
+                    'frame_id': frame.frame_id,
+                    'intrinsics': self.depth_intrinsics
+                }
             return None
+        else:
+            # Legacy implementation
+            try:
+                return self.depth_queue.get_nowait()
+            except queue.Empty:
+                return None
     
     def get_synchronized_frames(self) -> Tuple[Optional[Dict], Optional[Dict]]:
         """Get synchronized RGB and depth frames"""
-        rgb_frame = self.get_rgb_frame()
-        depth_frame = self.get_depth_frame()
-        
-        # In a real implementation, you'd synchronize by timestamp
-        # For now, just return the latest of each
-        return rgb_frame, depth_frame
+        if self.use_modern and self.modern_kinect:
+            frame = self.modern_kinect.get_frame()
+            if frame:
+                rgb_data = None
+                depth_data = None
+                
+                if frame.rgb is not None:
+                    rgb_data = {
+                        'frame': frame.rgb,
+                        'timestamp': frame.timestamp,
+                        'frame_id': frame.frame_id,
+                        'intrinsics': self.rgb_intrinsics
+                    }
+                
+                if frame.depth is not None:
+                    depth_data = {
+                        'frame': frame.depth,
+                        'timestamp': frame.timestamp,
+                        'frame_id': frame.frame_id,
+                        'intrinsics': self.depth_intrinsics
+                    }
+                
+                return rgb_data, depth_data
+            return None, None
+        else:
+            # Legacy implementation
+            rgb_frame = self.get_rgb_frame()
+            depth_frame = self.get_depth_frame()
+            return rgb_frame, depth_frame
     
     def get_camera_info(self) -> Dict[str, Any]:
         """Get camera calibration information"""
-        return {
-            'rgb_intrinsics': self.rgb_intrinsics,
-            'depth_intrinsics': self.depth_intrinsics,
-            'pipeline': getattr(self, 'pipeline', 'opencv'),
-            'device_id': self.device_id
-        }
+        if self.use_modern and self.modern_kinect:
+            return self.modern_kinect.get_camera_info()
+        else:
+            # Legacy implementation
+            return {
+                'rgb_intrinsics': self.rgb_intrinsics,
+                'depth_intrinsics': self.depth_intrinsics,
+                'pipeline': getattr(self, 'pipeline', 'opencv'),
+                'device_id': self.device_id
+            }
     
     def stop(self):
         """Stop capture"""
-        self.running = False
-        
-        if self.capture_thread:
-            self.capture_thread.join(timeout=5)
-        
-        if hasattr(self, 'rgb_cap'):
-            self.rgb_cap.release()
-        
-        if self.protonect_process:
-            self.protonect_process.terminate()
-            self.protonect_process.wait()
+        if self.use_modern and self.modern_kinect:
+            self.modern_kinect.stop_streaming()
+        else:
+            # Legacy implementation
+            self.running = False
+            
+            if self.capture_thread:
+                self.capture_thread.join(timeout=5)
+            
+            if hasattr(self, 'rgb_cap'):
+                self.rgb_cap.release()
+            
+            if self.protonect_process:
+                self.protonect_process.terminate()
+                self.protonect_process.wait()
+    
+    def is_connected(self) -> bool:
+        """Check if Kinect is connected"""
+        if self.use_modern and self.modern_kinect:
+            return self.modern_kinect.is_connected()
+        else:
+            return self._check_protonect()
     
     def __enter__(self):
         """Context manager entry"""

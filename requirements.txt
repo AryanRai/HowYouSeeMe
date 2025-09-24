@@ -1,16 +1,22 @@
-# HowYouSeeMe Dependencies
+# HowYouSeeMe Dependencies - Modern Python 3.12 + Anaconda
 
 # Core dependencies
 numpy>=1.21.0
 opencv-python>=4.5.0
 PyYAML>=6.0
+scipy>=1.7.0
 
-# Deep learning
-torch>=1.9.0
-torchvision>=0.10.0
+# Modern Kinect v2 bindings (Python 3.10+ compatible)
+# Install with: pip install git+https://github.com/cerealkiller2527/pylibfreenect2-py310.git
+# Requires: libfreenect2 built and LIBFREENECT2_INSTALL_PREFIX set
+
+# Deep learning (installed via conda for better CUDA support)
+torch>=2.0.0
+torchvision>=0.15.0
 
 # Computer vision and ML
-ultralytics>=8.0.0  # For YOLOv8 (alternative to torch hub)
+ultralytics>=8.0.0  # For YOLOv8/v9
+cython>=0.29.36     # Required for pylibfreenect2 build
 
 # Hand tracking and pose estimation
 mediapipe>=0.8.0
@@ -26,7 +32,6 @@ websockets>=10.0
 # Audio processing
 librosa>=0.8.0
 pyaudio>=0.2.11
-scipy>=1.7.0
 
 # Utilities
 Pillow>=8.0.0
@@ -39,6 +44,10 @@ pytest-asyncio>=0.15.0
 black>=21.0.0
 flake8>=3.9.0
 
+# Build dependencies (for pylibfreenect2)
+setuptools>=60.0.0
+wheel>=0.37.0
+
 # Optional: For better SLAM (install separately if needed)
 # opencv-contrib-python>=4.5.0  # For additional OpenCV modules
 
@@ -49,3 +58,8 @@ flake8>=3.9.0
 # Optional: For advanced NLP (install separately if needed)
 # transformers>=4.0.0
 # sentence-transformers>=2.0.0
+
+# Note: The following are installed via conda in the setup script:
+# - cmake, pkg-config (build tools)
+# - pytorch with CUDA support
+# - numpy, scipy, opencv (optimized versions)

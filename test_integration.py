@@ -43,12 +43,16 @@ class HowYouSeeMeIntegration:
         logger.info("Initializing HowYouSeeMe components...")
         
         try:
-            # Initialize Kinect interface
-            self.kinect = KinectV2Interface(use_protonect=True)
+            # Initialize Kinect interface (modern pylibfreenect2-py310)
+            self.kinect = KinectV2Interface(
+                use_modern=True,
+                preferred_pipeline="auto"  # Will choose best available (OpenGL, CPU, etc.)
+            )
             if not self.kinect.start():
-                logger.warning("Kinect failed, falling back to webcam")
-                self.kinect = None
+                logger.error("Failed to initialize Kinect")
                 return False
+            
+            logger.info(f"Kinect initialized: {self.kinect.get_camera_info()}")
             
             # Get camera info for SLAM
             camera_info = self.kinect.get_camera_info()
@@ -177,20 +181,13 @@ class HowYouSeeMeIntegration:
         try:
             while self.frame_count < max_frames:
                 # Get frame from Kinect
-                if self.kinect:
-                    rgb_data, depth_data = self.kinect.get_synchronized_frames()
-                    if rgb_data is None:
-                        time.sleep(0.01)
-                        continue
-                    
-                    rgb_frame = rgb_data['frame']
-                    depth_frame = depth_data['frame'] if depth_data else None
-                else:
-                    # Fallback: use webcam
-                    ret, rgb_frame = cv2.VideoCapture(0).read()
-                    if not ret:
-                        continue
-                    depth_frame = None
+                rgb_data, depth_data = self.kinect.get_synchronized_frames()
+                if rgb_data is None:
+                    time.sleep(0.01)
+                    continue
+                
+                rgb_frame = rgb_data['frame']
+                depth_frame = depth_data['frame'] if depth_data else None
                 
                 # Process frame through pipeline
                 results = self.process_frame(rgb_frame, depth_frame)
