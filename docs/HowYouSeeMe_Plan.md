@@ -55,25 +55,44 @@ HowYouSeeMe operates as part of the **DroidCore** robotics ecosystem:
 - **Data Synchronization**: Timestamp alignment and frame matching
 
 #### 1.2 Computer Vision Pipeline
+
+**Always-On Components:**
 - **SLAM (Simultaneous Localization and Mapping)**
-  - ORB-SLAM3 or similar for robust localization
+  - ORB-SLAM3 or RTAB-Map for RGB-D robust localization
   - Real-time map building and maintenance
   - Loop closure detection and correction
+  - Provides canonical map frame for entity anchoring
 
-- **Object Detection & Classification**
-  - YOLOv8/v9 for real-time object detection
+**On-Demand Components (Resource-Managed):**
+- **Object Detection (YOLO)**
+  - YOLOv8/v9 for accurate object detection
+  - Triggered by LLM queries or scheduled sweeps
+  - ROI-based processing for efficiency
   - Custom model training for domain-specific objects
-  - Multi-class detection with confidence scoring
+
+- **Human Analysis Pipeline**
+  - Lightweight person detector (always-on CPU, ~1-2Hz)
+  - Human pose detection and body tracking (on-demand)
+  - Multi-person tracking and identification
+  - Activity recognition based on pose sequences
+
+- **Face Analysis Suite**
+  - Face detection (lightweight Haar/MTCNN trigger)
+  - Face recognition with persistent identity mapping
+  - Emotion detection and analysis
+  - Gaze direction tracking for attention modeling
+  - Identity-to-body tracking fusion
 
 - **Semantic Segmentation**
-  - Instance segmentation for object boundaries
-  - Scene understanding and spatial relationships
+  - SAM (Segment Anything Model) or lightweight alternatives
+  - ROI-based segmentation triggered by object detection
+  - Instance-level scene understanding
   - Material and surface classification
 
-- **Scene Understanding**
-  - Spatial relationship mapping
-  - Activity recognition and event detection
-  - Context-aware scene analysis
+- **Vision-Language Models**
+  - High-cost scene captioning (on LLM request only)
+  - ROI-based detailed descriptions
+  - Visual question answering for complex queries
 
 #### 1.3 Vision-Language Model Integration
 - **Multimodal Understanding**: Image-text correspondence

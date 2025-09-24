@@ -138,7 +138,41 @@ Based on the project description, the system will expand to include:
 - Verify CUDA installation: Check CUDA samples build and run
 
 ## Key Files
-- `kinect_setup.md`: Detailed installation and setup instructions
+- `docs/kinect_setup.md`: Detailed installation and setup instructions
+- `docs/kinect.md`: Essential Kinect v2 setup and usage guide
+- `docs/HowYouSeeMe_Plan.md`: Comprehensive 16-week implementation roadmap
+- `docs/Resource_Management.md`: Entity-centric architecture and fusion rules
+- `docs/MCP_API_Specification.md`: Complete MCP server API documentation
+- `docs/Getting_Started.md`: Step-by-step setup guide with working code examples
 - `libfreenect2/README.md`: Complete libfreenect2 documentation
 - `libfreenect2/examples/Protonect.cpp`: Reference implementation
 - `libfreenect2/include/libfreenect2/libfreenect2.hpp`: Main API
+
+## Enhanced Development Approach
+
+### Resource-Aware Orchestration
+- **Always-On**: SLAM and lightweight person detector (CPU, 1-2Hz)
+- **On-Demand**: YOLO, face analysis, segmentation, VLM (GPU-managed)
+- **ROI-Based Processing**: Use detection outputs as ROIs for expensive models
+- **Adaptive Scaling**: Fallback to CPU models when GPU is constrained
+
+### Entity-Centric World State
+- **Persistent Entities**: Track objects, humans, and places with unique IDs
+- **Spatial Anchoring**: All entities anchored in SLAM map coordinates
+- **Temporal Fusion**: Confidence-weighted updates with provenance tracking
+- **Multi-modal Integration**: Combine YOLO, segmentation, face analysis
+- **Memory Integration**: Support user memories with semantic search
+
+### Advanced Features
+- **Human Analysis Pipeline**: Pose detection, face recognition, emotion analysis, gaze tracking
+- **Spatial Reasoning**: Distance calculations, reachability analysis, spatial relationships
+- **Change Detection**: Track environmental changes over time
+- **Natural Language Interfaces**: Convert visual data to descriptive text
+- **Visual Question Answering**: Use VLMs for complex scene understanding
+
+### MCP Integration
+- **Tool Registration**: Automatic registration with Ally's tool calling framework
+- **Real-time Streaming**: WebSocket API for live entity updates
+- **Memory Operations**: `remember_entity()`, `query_memory()`, semantic search
+- **Spatial Queries**: "What's within reach?", "Where is the apple?"
+- **Scene Understanding**: Natural language scene descriptions on demand
