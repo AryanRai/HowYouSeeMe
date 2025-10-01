@@ -220,6 +220,15 @@ credentials/
 # Archive directory (old implementations)
 archive/
 
+# External libraries and dependencies
+libfreenect2/
+libfreenect2-modern/
+pylibfreenect2-py310/
+
+# External ROS2 packages (should be installed separately)
+src/ros2_ws/src/kinect2_ros2/
+src/ros2_ws/src/iai_kinect2/
+
 # Temporary test files
 test_output/
 debug_output/
