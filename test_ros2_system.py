@@ -40,14 +40,14 @@ def test_workspace():
     """Test ROS2 workspace"""
     print("\n🔍 Testing ROS2 Workspace...")
     
-    # Check workspace exists
-    if not os.path.exists("/home/aryan/ros2_ws"):
-        print("❌ ROS2 workspace not found")
+    # Check workspace exists in new location
+    if not os.path.exists("src/ros2_ws"):
+        print("❌ ROS2 workspace not found in src/ros2_ws")
         return False
     
     # Test workspace build
     success, stdout, stderr = run_command(
-        "source /opt/ros/jazzy/setup.bash && cd ~/ros2_ws && source install/setup.bash && ros2 pkg list | grep howyouseeme"
+        "source /opt/ros/jazzy/setup.bash && cd src/ros2_ws && source install/setup.bash && ros2 pkg list | grep howyouseeme"
     )
     
     if success and "howyouseeme_ros2" in stdout:
@@ -114,7 +114,7 @@ def test_howyouseeme_subscriber():
     
     # Test if the node can start
     success, stdout, stderr = run_command(
-        "source /opt/ros/jazzy/setup.bash && source ~/ros2_ws/install/setup.bash && timeout 3s ros2 run howyouseeme_ros2 kinect_subscriber"
+        "source /opt/ros/jazzy/setup.bash && cd src/ros2_ws && source install/setup.bash && timeout 3s ros2 run howyouseeme_ros2 kinect_subscriber"
     )
     
     if "howyouseeme_subscriber" in stdout and "initialized" in stdout:
@@ -148,8 +148,8 @@ def test_launch_files():
     
     # Check if launch files exist
     launch_files = [
-        "src/perception/launch/howyouseeme_complete.launch.py",
-        "src/perception/launch/detection_only.launch.py"
+        "src/ros2_ws/src/howyouseeme_ros2/launch/howyouseeme_complete.launch.py",
+        "src/ros2_ws/src/howyouseeme_ros2/launch/detection_only.launch.py"
     ]
     
     all_exist = True

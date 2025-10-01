@@ -1,14 +1,259 @@
 
-/venv/lib
-/venv/bin
-/venv/share
-/venv
-*.pyc
+# HowYouSeeMe ROS2 System - Git Ignore Configuration
+
+# ============================================================================
+# Python
+# ============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# ============================================================================
+# ROS2 Workspace
+# ============================================================================
+src/ros2_ws/build/
+src/ros2_ws/install/
+src/ros2_ws/log/
+src/ros2_ws/.colcon_install_layout
+src/ros2_ws/COLCON_IGNORE
+
+# ROS2 generated files
+*.bag
+*.db3
+*.mcap
+
+# ============================================================================
+# Computer Vision & AI Models
+# ============================================================================
+# YOLO models (downloaded automatically)
 *.pt
+*.onnx
+*.engine
+*.trt
+*.weights
+*.cfg
+*.names
 *.partial
-/src/perception/__pycache__
-/src/perception/__pycache__
-src/perception/__pycache__/sensor_interface.cpython-312.pyc
-*.pyc
-*.pyc
-*.pyc
+
+# Model cache directories
+models/
+weights/
+checkpoints/
+
+# ============================================================================
+# Data & Logs
+# ============================================================================
+# Data directories
+data/cache/
+data/models/
+data/evidence/
+data/temp/
+data/*.jpg
+data/*.png
+data/*.mp4
+data/*.avi
+
+# Log files
+logs/
+*.log
+*.out
+*.err
+
+# ROS logs
+~/.ros/log/
+.ros/
+
+# ============================================================================
+# Build Artifacts
+# ============================================================================
+# C++ build artifacts
+build/
+install/
+devel/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+*.so.*
+
+# ============================================================================
+# IDE & Editor Files
+# ============================================================================
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ============================================================================
+# System Files
+# ============================================================================
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*~
+
+# ============================================================================
+# Hardware & Sensor Data
+# ============================================================================
+# Kinect calibration files (user-specific)
+~/.ros/camera_info/
+
+# Test images and videos
+test_*.jpg
+test_*.png
+test_*.mp4
+kinect_*.jpg
+slam_*.jpg
+detection_*.jpg
+
+# ============================================================================
+# Performance & Profiling
+# ============================================================================
+# Performance profiling
+*.prof
+*.pstats
+.coverage
+htmlcov/
+.pytest_cache/
+
+# ============================================================================
+# Documentation Build
+# ============================================================================
+# Sphinx documentation
+docs/_build/
+docs/build/
+
+# ============================================================================
+# Package Management
+# ============================================================================
+# pip
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Conda
+.conda/
+
+# ============================================================================
+# Security & Credentials
+# ============================================================================
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# API keys and secrets
+secrets/
+credentials/
+*.key
+*.pem
+*.crt
+
+# ============================================================================
+# Specific to HowYouSeeMe
+# ============================================================================
+# Archive directory (old implementations)
+archive/
+
+# Temporary test files
+test_output/
+debug_output/
+
+# Performance benchmarks
+benchmarks/
+performance_logs/
+
+# User-specific configurations
+config/local_*.yaml
+config/user_*.yaml
+
+# ============================================================================
+# Large Files & Datasets
+# ============================================================================
+# Large datasets
+datasets/
+*.hdf5
+*.h5
+*.npz
+*.npy
+
+# Video files
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+
+# Point cloud files
+*.pcd
+*.ply
+*.las
+
+# ============================================================================
+# End of .gitignore
+# ============================================================================
