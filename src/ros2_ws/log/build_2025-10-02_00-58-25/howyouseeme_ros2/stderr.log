@@ -1,0 +1,30 @@
+  File "/home/aryan/ros2_ws/install/howyouseeme_ros2/lib/python3.12/site-packages/src/perception/ros2_sensor_interface.py", line 172
+    self.get_logger().info(f\"ROS2 Kinect Interface initialized - Target FPS: {target_fps}\")\
+                             ^
+SyntaxError: unexpected character after line continuation character
+
+  File "/home/aryan/ros2_ws/install/howyouseeme_ros2/lib/python3.12/site-packages/src/perception/detection/ros2_object_detector.py", line 197
+    t KeyboardInterrupt:\n        print(\"Shutting down YOLO detector...\")\n    finally:\n        detector.shutdown()\n        rclpy.shutdown()\n\n\nif __name__ == '__main__':\n    main()\n"
+                                                                                             ^
+SyntaxError: unexpected character after line continuation character
+
+  File "/home/aryan/ros2_ws/install/howyouseeme_ros2/lib/python3.12/site-packages/src/perception/slam/ros2_slam_interface.py", line 217
+    __ == '__main__':\n    main()\n"
+                              ^
+SyntaxError: unexpected character after line continuation character
+
+  File "/home/aryan/ros2_ws/install/howyouseeme_ros2/lib/python3.12/site-packages/howyouseeme_ros2/perception/ros2_sensor_interface.py", line 172
+    self.get_logger().info(f\"ROS2 Kinect Interface initialized - Target FPS: {target_fps}\")\
+                             ^
+SyntaxError: unexpected character after line continuation character
+
+  File "/home/aryan/ros2_ws/install/howyouseeme_ros2/lib/python3.12/site-packages/howyouseeme_ros2/perception/detection/ros2_object_detector.py", line 197
+    t KeyboardInterrupt:\n        print(\"Shutting down YOLO detector...\")\n    finally:\n        detector.shutdown()\n        rclpy.shutdown()\n\n\nif __name__ == '__main__':\n    main()\n"
+                                                                                             ^
+SyntaxError: unexpected character after line continuation character
+
+  File "/home/aryan/ros2_ws/install/howyouseeme_ros2/lib/python3.12/site-packages/howyouseeme_ros2/perception/slam/ros2_slam_interface.py", line 217
+    __ == '__main__':\n    main()\n"
+                              ^
+SyntaxError: unexpected character after line continuation character
+

@@ -1,0 +1,5 @@
+[console_scripts]
+kinect_subscriber = howyouseeme_ros2.kinect_subscriber:main
+performance_monitor = howyouseeme_ros2.performance_monitor:main
+slam_interface_node = howyouseeme_ros2.slam_interface_node:main
+yolo_detector_node = howyouseeme_ros2.yolo_detector_node:main
