@@ -1,0 +1,162 @@
+# HowYouSeeMe ROS2 System - Git Attributes Configuration
+
+# ============================================================================
+# Text Files - Normalize line endings
+# ============================================================================
+* text=auto
+
+# Source code
+*.py text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.json text eol=lf
+*.xml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+
+# Configuration files
+*.cfg text eol=lf
+*.conf text eol=lf
+*.ini text eol=lf
+*.toml text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.rst text eol=lf
+*.txt text eol=lf
+
+# ROS2 specific files
+*.launch text eol=lf
+*.launch.py text eol=lf
+*.urdf text eol=lf
+*.xacro text eol=lf
+*.rviz text eol=lf
+package.xml text eol=lf
+CMakeLists.txt text eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+
+# ============================================================================
+# Binary Files - Do not normalize
+# ============================================================================
+# Images
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.bmp binary
+*.tiff binary
+*.ico binary
+*.svg binary
+
+# Videos
+*.mp4 binary
+*.avi binary
+*.mov binary
+*.mkv binary
+*.webm binary
+
+# Audio
+*.wav binary
+*.mp3 binary
+*.ogg binary
+*.flac binary
+
+# Archives
+*.zip binary
+*.tar binary
+*.gz binary
+*.bz2 binary
+*.xz binary
+*.7z binary
+
+# Executables
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.app binary
+
+# AI/ML Models
+*.pt binary
+*.pth binary
+*.onnx binary
+*.pb binary
+*.tflite binary
+*.h5 binary
+*.hdf5 binary
+*.pkl binary
+*.pickle binary
+
+# Point clouds and 3D data
+*.pcd binary
+*.ply binary
+*.stl binary
+*.obj binary
+*.dae binary
+
+# ROS bag files
+*.bag binary
+*.db3 binary
+*.mcap binary
+
+# ============================================================================
+# Large Files - Git LFS (if needed)
+# ============================================================================
+# Uncomment these lines if using Git LFS for large files
+# *.pt filter=lfs diff=lfs merge=lfs -text
+# *.bag filter=lfs diff=lfs merge=lfs -text
+# *.mp4 filter=lfs diff=lfs merge=lfs -text
+# *.pcd filter=lfs diff=lfs merge=lfs -text
+
+# ============================================================================
+# Language-specific settings
+# ============================================================================
+# Python
+*.py linguist-language=Python
+
+# C++
+*.cpp linguist-language=C++
+*.hpp linguist-language=C++
+
+# CMake
+CMakeLists.txt linguist-language=CMake
+*.cmake linguist-language=CMake
+
+# ROS2 Launch files
+*.launch.py linguist-language=Python
+
+# ============================================================================
+# Generated files - Mark as generated
+# ============================================================================
+# Build artifacts
+build/* linguist-generated=true
+install/* linguist-generated=true
+devel/* linguist-generated=true
+
+# Documentation builds
+docs/_build/* linguist-generated=true
+docs/build/* linguist-generated=true
+
+# ============================================================================
+# Diff settings
+# ============================================================================
+# Better diff for specific file types
+*.py diff=python
+*.cpp diff=cpp
+*.hpp diff=cpp
+*.md diff=markdown
+
+# ============================================================================
+# Merge settings
+# ============================================================================
+# Custom merge drivers for specific files
+*.launch.py merge=union
+package.xml merge=union
