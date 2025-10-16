@@ -157,13 +157,18 @@ private:
       // Create timestamp
       auto now = this->now();
       
-      // Publish RGB (convert BGRX to RGB)
+      // Publish RGB (convert BGRX to RGB and resize to match depth aspect ratio)
       if (rgb) {
         cv::Mat rgb_mat(rgb->height, rgb->width, CV_8UC4, rgb->data);
         cv::Mat rgb_converted;
         cv::cvtColor(rgb_mat, rgb_converted, cv::COLOR_BGRA2RGB);
         
-        auto rgb_msg = cv_bridge::CvImage(std_msgs::msg::Header(), "rgb8", rgb_converted).toImageMsg();
+        // Resize RGB to match depth aspect ratio (512x424)
+        // This ensures RTABMap can process both images
+        cv::Mat rgb_resized;
+        cv::resize(rgb_converted, rgb_resized, cv::Size(512, 424));
+        
+        auto rgb_msg = cv_bridge::CvImage(std_msgs::msg::Header(), "rgb8", rgb_resized).toImageMsg();
         rgb_msg->header.stamp = now;
         rgb_msg->header.frame_id = "kinect2_rgb_optical_frame";
         rgb_pub_->publish(*rgb_msg);
