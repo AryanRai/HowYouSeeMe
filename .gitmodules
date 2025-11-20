@@ -1,0 +1,4 @@
+[submodule "ros2_ws/src/kinect2_ros2_cuda"]
+	path = ros2_ws/src/kinect2_ros2_cuda
+	url = https://github.com/AryanRai/kinect2_ros2_cuda.git
+	branch = cuda-acceleration
