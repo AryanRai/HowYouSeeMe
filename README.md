@@ -102,6 +102,7 @@ HowYouSeeMe is designed as a **core perception module** for autonomous robotics:
 
 ### 🔍 **Production-Ready Computer Vision**
 - **RTABMap SLAM**: Production-grade 3D mapping and localization with loop closure
+  - 📖 [Quick Reference](SLAM_QUICK_REFERENCE.md) | [Performance Optimization](docs/SLAM_Performance_Optimization.md) | [Troubleshooting](docs/SLAM_Troubleshooting.md)
 - **YOLOv12 Detection**: Latest YOLO11 architecture with 80+ object classes
 - **Multi-Object Tracking**: Kalman filter-based tracking with ID persistence
 - **Real-Time Processing**: 14.5 FPS RGB-D with intelligent frame management

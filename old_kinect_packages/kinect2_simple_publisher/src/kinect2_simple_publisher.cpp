@@ -192,12 +192,43 @@ private:
         depth_pub_->publish(*depth_msg);
       }
       
-      // Publish camera info
+      // Publish camera info with proper calibration
       auto camera_info = sensor_msgs::msg::CameraInfo();
       camera_info.header.stamp = now;
       camera_info.header.frame_id = "kinect2_ir_optical_frame";
       camera_info.height = 424;
       camera_info.width = 512;
+      
+      // Kinect v2 IR camera intrinsics (512x424 resolution)
+      // These are typical values - ideally should be calibrated per device
+      camera_info.distortion_model = "plumb_bob";
+      camera_info.d = {0.0, 0.0, 0.0, 0.0, 0.0};  // No distortion for depth
+      
+      // Camera matrix K [fx 0 cx; 0 fy cy; 0 0 1]
+      camera_info.k = {
+        365.456, 0.0, 257.128,  // fx, 0, cx
+        0.0, 365.456, 210.468,  // 0, fy, cy
+        0.0, 0.0, 1.0           // 0, 0, 1
+      };
+      
+      // Rectification matrix (identity for monocular)
+      camera_info.r = {
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0
+      };
+      
+      // Projection matrix P [fx' 0 cx' Tx; 0 fy' cy' Ty; 0 0 1 0]
+      camera_info.p = {
+        365.456, 0.0, 257.128, 0.0,
+        0.0, 365.456, 210.468, 0.0,
+        0.0, 0.0, 1.0, 0.0
+      };
+      
+      camera_info.binning_x = 0;
+      camera_info.binning_y = 0;
+      camera_info.roi.do_rectify = false;
+      
       camera_info_pub_->publish(camera_info);
       
       // Release frames
