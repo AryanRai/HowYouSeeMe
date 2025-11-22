@@ -10,144 +10,194 @@
 ./cv_pipeline_menu.sh
 ```
 
-## Menu Features
+## Menu Structure
 
-### 🎯 Main Menu Options
+### 📋 Main Menu (Model Selection)
+```
+1) SAM2 - Segment Anything Model 2
+2) [Future] Depth Anything
+3) [Future] YOLO Object Detection
+4) [Future] DINO Features
+8) List Available Models
+9) Stop Active Streaming
+0) Exit
+```
 
-1. **Select Model** - Choose which CV model to use
-   - SAM2 (currently available)
-   - Future: Depth Anything, YOLO, DINO
+### 🎯 SAM2 Submenu (Mode Selection)
+```
+1) Point Mode - Segment object at a point
+2) Box Mode - Segment region in bounding box
+3) Multiple Points - Foreground/background points
+4) Everything Mode - Segment all objects
+5) Prompt Mode - Interactive prompting
+0) Back to Model Selection
+```
 
-2. **Select Mode** - Choose processing mode for the model
-   - Point Mode
-   - Box Mode
-   - Multiple Points Mode
-   - Everything Mode
+## How It Works
 
-3. **Configure Parameters** - Set mode-specific parameters
-   - Point: X, Y coordinates
-   - Box: Bounding box (x1,y1,x2,y2)
-   - Points: Multiple points and labels
-   - Everything: Grid size
+1. **Select Model** → Opens model-specific submenu
+2. **Select Mode** → Prompts for parameters
+3. **Enter Parameters** → Asks for duration & FPS
+4. **Auto-Execute** → Sends request immediately
+5. **Return to Menu** → Ready for next request
 
-4. **Toggle Streaming Mode** - Enable/disable continuous processing
-   - Set duration (seconds)
-   - Set FPS (frames per second)
+## Streaming Modes
 
-5. **Send Request** - Execute the configured request
-
-6. **View Results** - Monitor results in real-time
-
-7. **List Available Models** - Query available models
-
-8. **Get Model Info** - Get information about a model
-
-9. **Stop Streaming** - Stop active streaming
-
-0. **Exit** - Close the menu
+- **Duration = 0**: Single frame (default)
+- **Duration > 0**: Stream for N seconds
+- **Duration = -1**: Continuous streaming (until stopped)
 
 ## SAM2 Modes
 
-### Point Mode
+### 1. Point Mode 📍
 Segment an object at a specific point.
 
-**Parameters:**
-- X coordinate (default: 480)
-- Y coordinate (default: 270)
+**Prompts:**
+- X coordinate (0-960, default: 480)
+- Y coordinate (0-540, default: 270)
+- Duration (-1/0/N seconds)
+- FPS (if duration ≠ 0)
 
-**Example:**
-- Select mode: Point Mode
-- Configure: X=640, Y=360
-- Send request
+**Example Flow:**
+```
+Main Menu → 1 (SAM2) → 1 (Point Mode)
+X: 640
+Y: 360
+Duration: 0 (single frame)
+→ Auto-executes and returns to SAM2 menu
+```
 
-### Box Mode
+### 2. Box Mode 📦
 Segment everything inside a bounding box.
 
-**Parameters:**
-- Box coordinates: x1,y1,x2,y2 (default: 200,150,700,450)
+**Prompts:**
+- Box: x1,y1,x2,y2 (default: 200,150,700,450)
+- Duration (-1/0/N seconds)
+- FPS (if duration ≠ 0)
 
-**Example:**
-- Select mode: Box Mode
-- Configure: 300,200,600,400
-- Send request
+**Example Flow:**
+```
+Main Menu → 1 (SAM2) → 2 (Box Mode)
+Box: 300,200,600,400
+Duration: 10 (stream for 10s)
+FPS: 5
+→ Auto-executes and returns to SAM2 menu
+```
 
-### Multiple Points Mode
+### 3. Multiple Points Mode 🎯
 Use multiple foreground/background points for refinement.
 
-**Parameters:**
+**Prompts:**
 - Points: x1,y1,x2,y2,... (default: 480,270)
-- Labels: 1,1,0,... (1=foreground, 0=background)
+- Labels: 1,1,0,... (1=fg, 0=bg, default: 1)
+- Duration (-1/0/N seconds)
+- FPS (if duration ≠ 0)
 
-**Example:**
-- Select mode: Multiple Points
-- Configure points: 400,300,500,350,200,100
-- Configure labels: 1,1,0
-- Send request
+**Example Flow:**
+```
+Main Menu → 1 (SAM2) → 3 (Multiple Points)
+Points: 400,300,500,350,200,100
+Labels: 1,1,0
+Duration: 0
+→ Auto-executes and returns to SAM2 menu
+```
 
-### Everything Mode
+### 4. Everything Mode 🌐
 Automatically segment all objects in the frame.
 
-**Parameters:**
+**Prompts:**
 - Grid size: 16-64 (default: 32)
+- Duration (-1/0/N seconds)
+- FPS (if duration ≠ 0)
 
-**Example:**
-- Select mode: Everything Mode
-- Configure: Grid size = 24
-- Send request
+**Example Flow:**
+```
+Main Menu → 1 (SAM2) → 4 (Everything Mode)
+Grid size: 24
+Duration: -1 (continuous streaming)
+FPS: 3
+→ Auto-executes and returns to SAM2 menu
+```
 
-## Streaming Mode
+### 5. Prompt Mode 💬
+Interactive prompting with custom parameters.
 
-Enable continuous processing for video-like segmentation.
+**Prompts:**
+- Custom parameters (e.g., prompt_type=point,x=500,y=300)
+- Duration (-1/0/N seconds)
+- FPS (if duration ≠ 0)
 
-**Configuration:**
-1. Toggle Streaming Mode (option 4)
-2. Enable streaming
-3. Set duration (e.g., 10 seconds)
-4. Set FPS (e.g., 5 frames per second)
-5. Send request (option 5)
+**Example Flow:**
+```
+Main Menu → 1 (SAM2) → 5 (Prompt Mode)
+Parameters: prompt_type=box,box=100,100,800,400
+Duration: 5
+FPS: 10
+→ Auto-executes and returns to SAM2 menu
+```
 
-**Stop Streaming:**
-- Use option 9 to stop active streaming
+## Duration Modes
+
+- **0**: Single frame (one-shot processing)
+- **N > 0**: Stream for N seconds, then stop
+- **-1**: Continuous streaming (until manually stopped)
 
 ## Workflow Examples
 
-### Example 1: Quick Point Segmentation
+### Example 1: Quick Point Segmentation (Single Frame)
 ```
-1. Launch menu: ./cv_menu.sh
-2. Select option 5 (Send Request)
-   - Uses defaults: SAM2, Point mode, center point
-3. View in RViz: /cv_pipeline/visualization
-```
-
-### Example 2: Custom Box Segmentation
-```
-1. Launch menu
-2. Option 2: Select Mode → Box Mode
-3. Option 3: Configure Parameters → 300,200,600,400
-4. Option 5: Send Request
-5. View results in RViz
+./cv_menu.sh
+→ 1 (SAM2)
+→ 1 (Point Mode)
+→ X: [Enter] (use default 480)
+→ Y: [Enter] (use default 270)
+→ Duration: 0
+→ ✅ Auto-executes, returns to SAM2 menu
 ```
 
-### Example 3: Streaming Everything Mode
+### Example 2: Custom Box Segmentation (10 Second Stream)
 ```
-1. Launch menu
-2. Option 2: Select Mode → Everything Mode
-3. Option 3: Configure Parameters → Grid size = 16
-4. Option 4: Toggle Streaming → Enable, 15s, 3 FPS
-5. Option 5: Send Request
-6. Watch live stream in RViz
-7. Option 9: Stop Streaming (when done)
+./cv_menu.sh
+→ 1 (SAM2)
+→ 2 (Box Mode)
+→ Box: 300,200,600,400
+→ Duration: 10
+→ FPS: 5
+→ ✅ Auto-executes, streams for 10s
+```
+
+### Example 3: Continuous Everything Mode
+```
+./cv_menu.sh
+→ 1 (SAM2)
+→ 4 (Everything Mode)
+→ Grid size: 16
+→ Duration: -1
+→ FPS: 3
+→ ✅ Auto-executes, streams continuously
+→ [Later] Main Menu → 9 (Stop Streaming)
 ```
 
 ### Example 4: Multiple Points Refinement
 ```
-1. Launch menu
-2. Option 2: Select Mode → Multiple Points
-3. Option 3: Configure Parameters
-   - Points: 480,270,450,250,500,300
-   - Labels: 1,1,1 (all foreground)
-4. Option 5: Send Request
-5. View refined segmentation
+./cv_menu.sh
+→ 1 (SAM2)
+→ 3 (Multiple Points)
+→ Points: 480,270,450,250,500,300
+→ Labels: 1,1,1
+→ Duration: 0
+→ ✅ Auto-executes single frame
+```
+
+### Example 5: Custom Prompt Mode
+```
+./cv_menu.sh
+→ 1 (SAM2)
+→ 5 (Prompt Mode)
+→ Parameters: prompt_type=point,x=700,y=400
+→ Duration: 5
+→ FPS: 10
+→ ✅ Auto-executes, streams for 5s
 ```
 
 ## Tips

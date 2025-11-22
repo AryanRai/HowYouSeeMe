@@ -87,6 +87,7 @@ class CVPipelineServer(Node):
     def request_callback(self, msg):
         """Process model request"""
         self.get_logger().info(f'Request received: {msg.data}')
+        self.get_logger().debug(f'Current streaming state: {self.streaming}')
         
         # Check if we have images
         if self.latest_rgb is None:
@@ -126,6 +127,7 @@ class CVPipelineServer(Node):
                 return
             
             # Process single frame
+            self.get_logger().debug(f'Processing single frame with model: {model_name}')
             result = self.process_frame(model_name, params)
             
             # Publish result
@@ -133,7 +135,10 @@ class CVPipelineServer(Node):
             result_msg.data = json.dumps(result)
             self.result_pub.publish(result_msg)
             
-            self.get_logger().info(f'✅ Processing complete: {result.get("processing_time", 0):.3f}s')
+            if "error" in result:
+                self.get_logger().error(f'❌ Processing error: {result["error"]}')
+            else:
+                self.get_logger().info(f'✅ Processing complete: {result.get("processing_time", 0):.3f}s')
             
         except Exception as e:
             self.get_logger().error(f'Request processing error: {e}')
@@ -191,13 +196,16 @@ class CVPipelineServer(Node):
     
     def start_streaming(self, model_name: str, params: dict, duration: float, fps: float):
         """Start streaming mode"""
+        # Stop any existing stream first
         if self.streaming:
-            self.get_logger().warn('Already streaming! Stop current stream first.')
-            return
+            self.get_logger().warn('Already streaming! Stopping current stream first.')
+            self.stop_streaming()
+            # Give it a moment to clean up
+            time.sleep(0.1)
         
         self.streaming = True
         self.stream_model = model_name
-        self.stream_params = params
+        self.stream_params = params.copy()  # Make a copy to avoid reference issues
         self.stream_end_time = time.time() + duration
         
         # Create timer
@@ -225,11 +233,19 @@ class CVPipelineServer(Node):
             return
         
         self.streaming = False
+        
+        # Cancel and destroy timer
         if self.stream_timer:
             self.stream_timer.cancel()
+            self.destroy_timer(self.stream_timer)
             self.stream_timer = None
         
-        self.get_logger().info('⏹️  Streaming stopped')
+        # Reset streaming state
+        self.stream_end_time = None
+        self.stream_params = {}
+        self.stream_model = "sam2"
+        
+        self.get_logger().info('⏹️  Streaming stopped and state reset')
         
         # Publish status
         status = {"status": "streaming_stopped"}
@@ -239,14 +255,24 @@ class CVPipelineServer(Node):
     
     def stream_callback(self):
         """Process one frame in streaming mode"""
+        # Safety check
+        if not self.streaming:
+            self.get_logger().warn('Stream callback called but not streaming, stopping timer')
+            if self.stream_timer:
+                self.stream_timer.cancel()
+                self.destroy_timer(self.stream_timer)
+                self.stream_timer = None
+            return
+        
         # Check if duration expired
-        if time.time() >= self.stream_end_time:
+        if self.stream_end_time and time.time() >= self.stream_end_time:
             self.get_logger().info('⏱️  Stream duration completed')
             self.stop_streaming()
             return
         
         # Check if we have images
         if self.latest_rgb is None:
+            self.get_logger().debug('No RGB image available for streaming')
             return
         
         # Process frame
@@ -255,15 +281,20 @@ class CVPipelineServer(Node):
             
             # Add streaming info
             result["streaming"] = True
-            result["time_remaining"] = self.stream_end_time - time.time()
+            if self.stream_end_time:
+                result["time_remaining"] = self.stream_end_time - time.time()
             
             # Publish result
             result_msg = String()
             result_msg.data = json.dumps(result)
             self.result_pub.publish(result_msg)
             
+            self.get_logger().debug(f'Stream frame processed: {result.get("processing_time", 0):.3f}s')
+            
         except Exception as e:
             self.get_logger().error(f'Stream processing error: {e}')
+            # On error, stop streaming to prevent continuous errors
+            self.stop_streaming()
 
 
 def main(args=None):

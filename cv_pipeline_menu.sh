@@ -1,6 +1,6 @@
 #!/bin/bash
-# Interactive CV Pipeline Menu
-# Select models, modes, and parameters
+# Interactive CV Pipeline Menu - Nested Model-Specific Menus
+# Auto-executes after parameter input
 
 # Colors
 RED='\033[0;31m'
@@ -8,20 +8,48 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
-# Default values
-MODEL="sam2"
-MODE="point"
-STREAMING=false
-DURATION=10
-FPS=5
-X=480
-Y=270
-BOX="200,150,700,450"
-POINTS="480,270"
-LABELS="1"
-GRID_SIZE=32
+# Trap Ctrl+C to offer stopping streaming
+trap ctrl_c INT
+
+ctrl_c() {
+    echo ""
+    echo ""
+    echo -e "${YELLOW}⚠️  Ctrl+C detected${NC}"
+    echo ""
+    echo "What would you like to do?"
+    echo "  1) Stop active streaming and return to menu"
+    echo "  2) Exit menu completely"
+    echo "  3) Cancel (return to menu)"
+    echo ""
+    echo -n "Select option: "
+    read choice
+    
+    case $choice in
+        1)
+            echo ""
+            echo "Stopping streaming..."
+            ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+                "data: 'sam2:stop=true'" 2>/dev/null
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}✅ Stop command sent${NC}"
+            fi
+            sleep 1
+            ;;
+        2)
+            echo ""
+            echo -e "${GREEN}Goodbye! 👋${NC}"
+            exit 0
+            ;;
+        3)
+            echo ""
+            echo "Returning to menu..."
+            sleep 1
+            ;;
+    esac
+}
 
 # Function to print colored text
 print_header() {
@@ -49,104 +77,60 @@ print_warning() {
 # Function to show main menu
 show_main_menu() {
     clear
-    print_header "  CV Pipeline Interactive Menu"
+    print_header "  CV Pipeline - Model Selection"
     echo ""
-    echo -e "${GREEN}Current Configuration:${NC}"
-    echo -e "  Model:     ${YELLOW}$MODEL${NC}"
-    echo -e "  Mode:      ${YELLOW}$MODE${NC}"
-    echo -e "  Streaming: ${YELLOW}$STREAMING${NC}"
-    if [ "$STREAMING" = true ]; then
-        echo -e "  Duration:  ${YELLOW}${DURATION}s${NC}"
-        echo -e "  FPS:       ${YELLOW}$FPS${NC}"
-    fi
+    echo -e "${MAGENTA}Select a Model:${NC}"
     echo ""
-    echo -e "${CYAN}Options:${NC}"
-    echo "  1) Select Model"
-    echo "  2) Select Mode"
-    echo "  3) Configure Parameters"
-    echo "  4) Toggle Streaming Mode"
-    echo "  5) Send Request"
-    echo "  6) View Results"
-    echo "  7) List Available Models"
-    echo "  8) Get Model Info"
-    echo "  9) Stop Streaming"
-    echo "  0) Exit"
+    echo "  1) 🎯 SAM2 - Segment Anything Model 2"
+    echo "  2) 📊 [Future] Depth Anything"
+    echo "  3) 🔍 [Future] YOLO Object Detection"
+    echo "  4) 🧠 [Future] DINO Features"
+    echo ""
+    echo -e "${CYAN}System Commands:${NC}"
+    echo "  8) 📋 List Available Models"
+    echo "  9) 🛑 Stop Active Streaming"
+    echo ""
+    echo -e "${YELLOW}Tip: Press Ctrl+C anytime to stop streaming${NC}"
+    echo ""
+    echo "  0) 🚪 Exit"
     echo ""
     echo -n "Select option: "
 }
 
-# Function to select model
-select_model() {
-    clear
-    print_header "  Select Model"
-    echo ""
-    echo "Available Models:"
-    echo "  1) SAM2 - Segment Anything Model 2"
-    echo "  2) [Future] Depth Anything"
-    echo "  3) [Future] YOLO"
-    echo "  4) [Future] DINO"
-    echo "  0) Back"
-    echo ""
-    echo -n "Select model: "
-    read choice
-    
-    case $choice in
-        1)
-            MODEL="sam2"
-            print_success "Selected SAM2"
-            sleep 1
-            ;;
-        2|3|4)
-            print_warning "Model not yet implemented"
-            sleep 2
-            ;;
-        0)
-            return
-            ;;
-        *)
-            print_error "Invalid option"
-            sleep 1
-            ;;
-    esac
-}
-
-# Function to select mode
-select_mode() {
-    clear
-    print_header "  Select Mode for $MODEL"
-    echo ""
-    
-    if [ "$MODEL" = "sam2" ]; then
-        echo "SAM2 Modes:"
-        echo "  1) Point Mode - Segment object at a point"
-        echo "  2) Box Mode - Segment region in bounding box"
-        echo "  3) Multiple Points - Use multiple fg/bg points"
-        echo "  4) Everything Mode - Segment all objects"
-        echo "  0) Back"
+# Function to show SAM2 menu
+show_sam2_menu() {
+    while true; do
+        clear
+        print_header "  SAM2 - Segment Anything Model 2"
+        echo ""
+        echo -e "${MAGENTA}Select Mode:${NC}"
+        echo ""
+        echo "  1) 📍 Point Mode - Segment object at a point"
+        echo "  2) 📦 Box Mode - Segment region in bounding box"
+        echo "  3) 🎯 Multiple Points - Foreground/background points"
+        echo "  4) 🌐 Everything Mode - Segment all objects"
+        echo "  5) 💬 Prompt Mode - Interactive prompting"
+        echo ""
+        echo "  0) ⬅️  Back to Model Selection"
         echo ""
         echo -n "Select mode: "
         read choice
         
         case $choice in
             1)
-                MODE="point"
-                print_success "Selected Point Mode"
-                sleep 1
+                sam2_point_mode
                 ;;
             2)
-                MODE="box"
-                print_success "Selected Box Mode"
-                sleep 1
+                sam2_box_mode
                 ;;
             3)
-                MODE="points"
-                print_success "Selected Multiple Points Mode"
-                sleep 1
+                sam2_points_mode
                 ;;
             4)
-                MODE="everything"
-                print_success "Selected Everything Mode"
-                sleep 1
+                sam2_everything_mode
+                ;;
+            5)
+                sam2_prompt_mode
                 ;;
             0)
                 return
@@ -156,245 +140,229 @@ select_mode() {
                 sleep 1
                 ;;
         esac
+    done
+}
+
+# SAM2 Point Mode
+sam2_point_mode() {
+    clear
+    print_header "  SAM2 - Point Mode"
+    echo ""
+    echo -e "${YELLOW}Segment object at a specific point${NC}"
+    echo ""
+    
+    # Get parameters
+    echo -n "X coordinate (0-960, default 480): "
+    read x
+    x=${x:-480}
+    
+    echo -n "Y coordinate (0-540, default 270): "
+    read y
+    y=${y:-270}
+    
+    echo -n "Duration in seconds (-1 for streaming, 0 for single frame): "
+    read duration
+    duration=${duration:-0}
+    
+    if [ "$duration" -ne 0 ]; then
+        echo -n "FPS (1-30, default 5): "
+        read fps
+        fps=${fps:-5}
     fi
+    
+    # Build and send request
+    send_sam2_request "point" "x=$x,y=$y" "$duration" "$fps"
 }
 
-# Function to configure parameters
-configure_parameters() {
+# SAM2 Box Mode
+sam2_box_mode() {
     clear
-    print_header "  Configure Parameters for $MODE Mode"
+    print_header "  SAM2 - Box Mode"
+    echo ""
+    echo -e "${YELLOW}Segment everything inside a bounding box${NC}"
     echo ""
     
-    case $MODE in
-        point)
-            echo "Current: X=$X, Y=$Y"
-            echo ""
-            echo -n "Enter X coordinate (or press Enter to keep $X): "
-            read input
-            [ ! -z "$input" ] && X=$input
-            
-            echo -n "Enter Y coordinate (or press Enter to keep $Y): "
-            read input
-            [ ! -z "$input" ] && Y=$input
-            
-            print_success "Point set to ($X, $Y)"
-            sleep 1
-            ;;
-        
-        box)
-            echo "Current: $BOX (x1,y1,x2,y2)"
-            echo ""
-            echo -n "Enter box coordinates (x1,y1,x2,y2) or press Enter to keep: "
-            read input
-            [ ! -z "$input" ] && BOX=$input
-            
-            print_success "Box set to $BOX"
-            sleep 1
-            ;;
-        
-        points)
-            echo "Current Points: $POINTS"
-            echo "Current Labels: $LABELS (1=foreground, 0=background)"
-            echo ""
-            echo -n "Enter points (x1,y1,x2,y2,...) or press Enter to keep: "
-            read input
-            [ ! -z "$input" ] && POINTS=$input
-            
-            echo -n "Enter labels (1,1,0,...) or press Enter to keep: "
-            read input
-            [ ! -z "$input" ] && LABELS=$input
-            
-            print_success "Points configured"
-            sleep 1
-            ;;
-        
-        everything)
-            echo "Current Grid Size: $GRID_SIZE"
-            echo ""
-            echo -n "Enter grid size (16-64) or press Enter to keep $GRID_SIZE: "
-            read input
-            [ ! -z "$input" ] && GRID_SIZE=$input
-            
-            print_success "Grid size set to $GRID_SIZE"
-            sleep 1
-            ;;
-        
-        *)
-            print_error "No parameters for this mode"
-            sleep 1
-            ;;
-    esac
+    echo -n "Box coordinates x1,y1,x2,y2 (default 200,150,700,450): "
+    read box
+    box=${box:-200,150,700,450}
+    
+    echo -n "Duration in seconds (-1 for streaming, 0 for single frame): "
+    read duration
+    duration=${duration:-0}
+    
+    if [ "$duration" -ne 0 ]; then
+        echo -n "FPS (1-30, default 5): "
+        read fps
+        fps=${fps:-5}
+    fi
+    
+    send_sam2_request "box" "box=$box" "$duration" "$fps"
 }
 
-# Function to toggle streaming
-toggle_streaming() {
+# SAM2 Multiple Points Mode
+sam2_points_mode() {
     clear
-    print_header "  Streaming Configuration"
+    print_header "  SAM2 - Multiple Points Mode"
+    echo ""
+    echo -e "${YELLOW}Use multiple foreground/background points${NC}"
     echo ""
     
-    if [ "$STREAMING" = true ]; then
-        echo "Streaming is currently ENABLED"
-        echo ""
-        echo "  1) Disable Streaming"
-        echo "  2) Change Duration (current: ${DURATION}s)"
-        echo "  3) Change FPS (current: $FPS)"
-        echo "  0) Back"
-        echo ""
-        echo -n "Select option: "
-        read choice
-        
-        case $choice in
-            1)
-                STREAMING=false
-                print_success "Streaming disabled"
-                sleep 1
-                ;;
-            2)
-                echo -n "Enter duration in seconds: "
-                read input
-                [ ! -z "$input" ] && DURATION=$input
-                print_success "Duration set to ${DURATION}s"
-                sleep 1
-                ;;
-            3)
-                echo -n "Enter FPS (1-30): "
-                read input
-                [ ! -z "$input" ] && FPS=$input
-                print_success "FPS set to $FPS"
-                sleep 1
-                ;;
-            0)
-                return
-                ;;
-        esac
+    echo -n "Points x1,y1,x2,y2,... (default 480,270): "
+    read points
+    points=${points:-480,270}
+    
+    echo -n "Labels 1,1,0,... (1=fg, 0=bg, default 1): "
+    read labels
+    labels=${labels:-1}
+    
+    echo -n "Duration in seconds (-1 for streaming, 0 for single frame): "
+    read duration
+    duration=${duration:-0}
+    
+    if [ "$duration" -ne 0 ]; then
+        echo -n "FPS (1-30, default 5): "
+        read fps
+        fps=${fps:-5}
+    fi
+    
+    send_sam2_request "points" "points=$points,labels=$labels" "$duration" "$fps"
+}
+
+# SAM2 Everything Mode
+sam2_everything_mode() {
+    clear
+    print_header "  SAM2 - Everything Mode"
+    echo ""
+    echo -e "${YELLOW}Automatically segment all objects${NC}"
+    echo ""
+    
+    echo -n "Grid size (16-64, default 32): "
+    read grid_size
+    grid_size=${grid_size:-32}
+    
+    echo -n "Duration in seconds (-1 for streaming, 0 for single frame): "
+    read duration
+    duration=${duration:-0}
+    
+    if [ "$duration" -ne 0 ]; then
+        echo -n "FPS (1-30, default 5): "
+        read fps
+        fps=${fps:-5}
+    fi
+    
+    send_sam2_request "everything" "grid_size=$grid_size" "$duration" "$fps"
+}
+
+# SAM2 Prompt Mode
+sam2_prompt_mode() {
+    clear
+    print_header "  SAM2 - Prompt Mode"
+    echo ""
+    echo -e "${YELLOW}Interactive prompting with custom parameters${NC}"
+    echo ""
+    
+    echo "Enter custom prompt parameters (e.g., prompt_type=point,x=500,y=300)"
+    echo -n "Parameters: "
+    read params
+    
+    if [ -z "$params" ]; then
+        print_error "No parameters provided"
+        sleep 2
+        return
+    fi
+    
+    echo -n "Duration in seconds (-1 for streaming, 0 for single frame): "
+    read duration
+    duration=${duration:-0}
+    
+    if [ "$duration" -ne 0 ]; then
+        echo -n "FPS (1-30, default 5): "
+        read fps
+        fps=${fps:-5}
+    fi
+    
+    send_sam2_request "custom" "$params" "$duration" "$fps"
+}
+
+# Function to send SAM2 request
+send_sam2_request() {
+    local mode=$1
+    local params=$2
+    local duration=$3
+    local fps=$4
+    
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    
+    # Build request
+    local request="sam2:"
+    
+    if [ "$mode" = "custom" ]; then
+        request="${request}${params}"
     else
-        echo "Streaming is currently DISABLED"
-        echo ""
-        echo -n "Enable streaming? (y/n): "
-        read choice
-        
-        if [ "$choice" = "y" ] || [ "$choice" = "Y" ]; then
-            STREAMING=true
-            
-            echo -n "Enter duration in seconds (default: 10): "
-            read input
-            [ ! -z "$input" ] && DURATION=$input
-            
-            echo -n "Enter FPS (default: 5): "
-            read input
-            [ ! -z "$input" ] && FPS=$input
-            
-            print_success "Streaming enabled: ${DURATION}s @ ${FPS} FPS"
-            sleep 1
-        fi
+        request="${request}prompt_type=${mode},${params}"
     fi
-}
-
-# Function to build and send request
-send_request() {
-    clear
-    print_header "  Sending Request"
-    echo ""
-    
-    # Build request string
-    REQUEST="${MODEL}:prompt_type=${MODE}"
-    
-    # Add mode-specific parameters
-    case $MODE in
-        point)
-            REQUEST="${REQUEST},x=${X},y=${Y}"
-            ;;
-        box)
-            REQUEST="${REQUEST},box=${BOX}"
-            ;;
-        points)
-            REQUEST="${REQUEST},points=${POINTS},labels=${LABELS}"
-            ;;
-        everything)
-            REQUEST="${REQUEST},grid_size=${GRID_SIZE}"
-            ;;
-    esac
     
     # Add streaming parameters
-    if [ "$STREAMING" = true ]; then
-        REQUEST="${REQUEST},stream=true,duration=${DURATION},fps=${FPS}"
+    if [ "$duration" -eq -1 ]; then
+        request="${request},stream=true,duration=999999,fps=${fps}"
+        echo -e "${MAGENTA}🔄 Starting CONTINUOUS streaming @ ${fps} FPS${NC}"
+        echo -e "${YELLOW}   Use option 9 to stop${NC}"
+    elif [ "$duration" -gt 0 ]; then
+        request="${request},stream=true,duration=${duration},fps=${fps}"
+        echo -e "${MAGENTA}🎬 Starting streaming: ${duration}s @ ${fps} FPS${NC}"
+    else
+        echo -e "${GREEN}📸 Processing single frame${NC}"
     fi
     
-    echo -e "${YELLOW}Request:${NC} $REQUEST"
     echo ""
-    echo "Sending to /cv_pipeline/model_request..."
+    echo -e "${BLUE}Request:${NC} $request"
     echo ""
     
     # Send request
     ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-        "data: '$REQUEST'"
+        "data: '$request'" 2>/dev/null
     
     if [ $? -eq 0 ]; then
         print_success "Request sent successfully!"
         echo ""
-        if [ "$STREAMING" = true ]; then
-            print_info "Streaming started for ${DURATION}s @ ${FPS} FPS"
-            print_info "Watch in RViz: /cv_pipeline/visualization"
-        else
-            print_info "Processing... Check /cv_pipeline/visualization in RViz"
+        print_info "Watch results in RViz: /cv_pipeline/visualization"
+        
+        if [ "$duration" -ne 0 ]; then
+            print_info "Monitor: ros2 topic echo /cv_pipeline/results"
         fi
     else
         print_error "Failed to send request"
+        print_warning "Is the CV Pipeline server running?"
     fi
     
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo "Press Enter to continue..."
     read
 }
 
-# Function to view results
-view_results() {
-    clear
-    print_header "  View Results"
-    echo ""
-    echo "Listening to /cv_pipeline/results (Ctrl+C to stop)..."
-    echo ""
-    
-    ros2 topic echo /cv_pipeline/results
-}
+
+
+
+
+
 
 # Function to list models
 list_models() {
     clear
     print_header "  List Available Models"
     echo ""
-    echo "Sending request..."
+    echo "Querying available models..."
     echo ""
     
     ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-        "data: 'sam2:list_models=true'"
+        "data: 'sam2:list_models=true'" 2>/dev/null
     
     sleep 1
     
     echo ""
-    echo "Check results with:"
-    echo "  ros2 topic echo /cv_pipeline/results --once"
-    echo ""
-    echo "Press Enter to continue..."
-    read
-}
-
-# Function to get model info
-get_model_info() {
-    clear
-    print_header "  Get Model Info"
-    echo ""
-    echo "Getting info for: $MODEL"
-    echo ""
-    
-    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-        "data: '${MODEL}:model_info=true'"
-    
-    sleep 1
-    
-    echo ""
-    echo "Check results with:"
-    echo "  ros2 topic echo /cv_pipeline/results --once"
+    print_info "Check results: ros2 topic echo /cv_pipeline/results --once"
     echo ""
     echo "Press Enter to continue..."
     read
@@ -403,19 +371,30 @@ get_model_info() {
 # Function to stop streaming
 stop_streaming() {
     clear
-    print_header "  Stop Streaming"
+    print_header "  Stop Active Streaming"
+    echo ""
+    echo -e "${YELLOW}This will stop any active streaming session.${NC}"
     echo ""
     echo "Sending stop command..."
     echo ""
     
     ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-        "data: 'sam2:stop=true'"
+        "data: 'sam2:stop=true'" 2>/dev/null
     
     if [ $? -eq 0 ]; then
-        print_success "Stop command sent"
-        STREAMING=false
+        print_success "Stop command sent successfully!"
+        echo ""
+        print_info "Streaming should stop within 1-2 seconds"
+        echo ""
+        echo "You can verify by checking:"
+        echo "  ros2 topic echo /cv_pipeline/results"
     else
         print_error "Failed to send stop command"
+        echo ""
+        print_warning "Possible reasons:"
+        echo "  - CV Pipeline server is not running"
+        echo "  - No active streaming session"
+        echo "  - ROS2 communication issue"
     fi
     
     echo ""
@@ -430,35 +409,29 @@ while true; do
     
     case $choice in
         1)
-            select_model
+            show_sam2_menu
             ;;
-        2)
-            select_mode
-            ;;
-        3)
-            configure_parameters
-            ;;
-        4)
-            toggle_streaming
-            ;;
-        5)
-            send_request
-            ;;
-        6)
-            view_results
-            ;;
-        7)
-            list_models
+        2|3|4)
+            clear
+            print_warning "Model not yet implemented"
+            echo ""
+            echo "Coming soon:"
+            echo "  - Depth Anything: Depth estimation"
+            echo "  - YOLO: Object detection"
+            echo "  - DINO: Feature extraction"
+            echo ""
+            echo "Press Enter to continue..."
+            read
             ;;
         8)
-            get_model_info
+            list_models
             ;;
         9)
             stop_streaming
             ;;
         0)
             clear
-            print_success "Goodbye!"
+            print_success "Goodbye! 👋"
             exit 0
             ;;
         *)
