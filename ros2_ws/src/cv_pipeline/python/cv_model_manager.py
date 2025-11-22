@@ -194,11 +194,19 @@ class SAM2Model(BaseModel):
     def _process_box(self, params: Dict, w: int, h: int) -> Tuple:
         """Process box prompt"""
         box_str = params.get("box", f"0,0,{w},{h}")
-        box = np.array([int(x) for x in box_str.split(",")])
+        box_coords = [int(x) for x in box_str.split(",")]
+        
+        # Ensure we have 4 coordinates
+        if len(box_coords) != 4:
+            print(f"Warning: Box should have 4 coordinates, got {len(box_coords)}")
+            box_coords = [0, 0, w, h]
+        
+        # SAM2 expects box as [x1, y1, x2, y2]
+        box = np.array(box_coords, dtype=np.float32)
         
         masks, scores, logits = self.predictor.predict(
             box=box,
-            multimask_output=False
+            multimask_output=True  # Changed to True for better results
         )
         
         return masks, scores, {"box": box.tolist()}
@@ -207,10 +215,27 @@ class SAM2Model(BaseModel):
         """Process multiple points prompt"""
         points_str = params.get("points", f"{w//2},{h//2}")
         coords = [int(x) for x in points_str.split(",")]
-        point_coords = np.array(coords).reshape(-1, 2)
         
-        labels_str = params.get("labels", "1" * len(point_coords))
-        point_labels = np.array([int(x) for x in labels_str.split(",")])
+        # Ensure even number of coordinates
+        if len(coords) % 2 != 0:
+            print(f"Warning: Points should have even number of coordinates, got {len(coords)}")
+            coords = coords[:-1]  # Remove last odd coordinate
+        
+        point_coords = np.array(coords, dtype=np.float32).reshape(-1, 2)
+        
+        # Parse labels
+        labels_str = params.get("labels", ",".join(["1"] * len(point_coords)))
+        label_list = [int(x) for x in labels_str.split(",")]
+        
+        # Ensure we have same number of labels as points
+        if len(label_list) != len(point_coords):
+            print(f"Warning: Number of labels ({len(label_list)}) doesn't match points ({len(point_coords)})")
+            # Pad with 1s if needed
+            while len(label_list) < len(point_coords):
+                label_list.append(1)
+            label_list = label_list[:len(point_coords)]
+        
+        point_labels = np.array(label_list, dtype=np.int32)
         
         masks, scores, logits = self.predictor.predict(
             point_coords=point_coords,
@@ -261,11 +286,16 @@ class SAM2Model(BaseModel):
             
             masks = result.get("masks", [])
             scores = result.get("scores", [])
+            prompt_type = result.get("prompt_type", "point")
             
             if len(masks) == 0:
                 return vis_image
             
-            # Use the best mask
+            # For "everything" mode, show multiple masks with different colors
+            if prompt_type == "everything":
+                return self._visualize_everything(vis_image, masks, scores, result)
+            
+            # For other modes, use the best mask
             best_idx = np.argmax(scores)
             best_mask = masks[best_idx]
             best_score = scores[best_idx]
@@ -288,7 +318,6 @@ class SAM2Model(BaseModel):
             cv2.drawContours(vis_image, contours, -1, (0, 255, 0), 2)
             
             # Draw prompts
-            prompt_type = result.get("prompt_type", "point")
             prompt_data = result.get("prompt_data", {})
             
             if prompt_type == "point" and "point" in prompt_data:
@@ -319,6 +348,72 @@ class SAM2Model(BaseModel):
             
         except Exception as e:
             print(f"Visualization error: {e}")
+            return image
+    
+    def _visualize_everything(self, image: np.ndarray, masks: list, scores: list, result: Dict) -> np.ndarray:
+        """Visualize everything mode with multiple colored masks"""
+        try:
+            vis_image = image.copy()
+            
+            # Define distinct colors for different masks
+            colors = [
+                (255, 0, 0),    # Red
+                (0, 255, 0),    # Green
+                (0, 0, 255),    # Blue
+                (255, 255, 0),  # Cyan
+                (255, 0, 255),  # Magenta
+                (0, 255, 255),  # Yellow
+                (128, 0, 255),  # Purple
+                (255, 128, 0),  # Orange
+                (0, 255, 128),  # Spring Green
+                (128, 255, 0),  # Chartreuse
+            ]
+            
+            # Sort masks by score (best first)
+            sorted_indices = np.argsort(scores)[::-1]
+            
+            # Show top N masks (limit to avoid clutter)
+            max_masks = min(10, len(masks))
+            
+            for i, idx in enumerate(sorted_indices[:max_masks]):
+                mask = masks[idx]
+                score = scores[idx]
+                
+                # Skip very small masks
+                if np.sum(mask) < 100:
+                    continue
+                
+                # Get color for this mask
+                color = colors[i % len(colors)]
+                color_np = np.array(color, dtype=np.uint8)
+                
+                # Create overlay
+                overlay = vis_image.copy()
+                mask_bool = mask.astype(bool)
+                overlay[mask_bool] = (overlay[mask_bool] * 0.5 + color_np * 0.5).astype(np.uint8)
+                
+                # Blend
+                vis_image = cv2.addWeighted(vis_image, 0.7, overlay, 0.3, 0)
+                
+                # Draw contours
+                contours, _ = cv2.findContours(
+                    mask.astype(np.uint8),
+                    cv2.RETR_EXTERNAL,
+                    cv2.CHAIN_APPROX_SIMPLE
+                )
+                cv2.drawContours(vis_image, contours, -1, color, 2)
+            
+            # Add text
+            text = f"SAM2 [everything] {max_masks} objects"
+            cv2.putText(vis_image, text, (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+            cv2.putText(vis_image, text, (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 1)
+            
+            return vis_image
+            
+        except Exception as e:
+            print(f"Everything visualization error: {e}")
             return image
 
 
