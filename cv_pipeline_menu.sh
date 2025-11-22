@@ -82,9 +82,10 @@ show_main_menu() {
     echo -e "${MAGENTA}Select a Model:${NC}"
     echo ""
     echo "  1) 🎯 SAM2 - Segment Anything Model 2"
-    echo "  2) 📊 [Future] Depth Anything"
-    echo "  3) 🔍 [Future] YOLO Object Detection"
-    echo "  4) 🧠 [Future] DINO Features"
+    echo "  2) ⚡ FastSAM - Faster SAM with Text Prompts"
+    echo "  3) 📊 [Future] Depth Anything"
+    echo "  4) 🔍 [Future] YOLO Object Detection"
+    echo "  5) 🧠 [Future] DINO Features"
     echo ""
     echo -e "${CYAN}System Commands:${NC}"
     echo "  8) 📋 List Available Models"
@@ -284,6 +285,249 @@ sam2_prompt_mode() {
     send_sam2_request "custom" "$params" "$duration" "$fps"
 }
 
+# Function to show FastSAM menu
+show_fastsam_menu() {
+    while true; do
+        clear
+        print_header "  FastSAM - Fast Segment Anything"
+        echo ""
+        echo -e "${MAGENTA}Select Mode:${NC}"
+        echo ""
+        echo "  1) 📍 Point Mode - Segment object at a point"
+        echo "  2) 📦 Box Mode - Segment region in bounding box"
+        echo "  3) 🎯 Multiple Points - Foreground/background points"
+        echo "  4) 🌐 Everything Mode - Segment all objects"
+        echo "  5) 💬 Text Mode - Segment using text description"
+        echo ""
+        echo "  0) ⬅️  Back to Model Selection"
+        echo ""
+        echo -n "Select mode: "
+        read choice
+        
+        case $choice in
+            1)
+                fastsam_point_mode
+                ;;
+            2)
+                fastsam_box_mode
+                ;;
+            3)
+                fastsam_points_mode
+                ;;
+            4)
+                fastsam_everything_mode
+                ;;
+            5)
+                fastsam_text_mode
+                ;;
+            0)
+                return
+                ;;
+            *)
+                print_error "Invalid option"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# FastSAM Point Mode
+fastsam_point_mode() {
+    clear
+    print_header "  FastSAM - Point Mode"
+    echo ""
+    echo -e "${YELLOW}Segment object at a specific point${NC}"
+    echo ""
+    
+    echo -n "X coordinate (0-960, default 480): "
+    read x
+    x=${x:-480}
+    
+    echo -n "Y coordinate (0-540, default 270): "
+    read y
+    y=${y:-270}
+    
+    echo -n "Duration in seconds (-1 for streaming, 0 for single frame): "
+    read duration
+    duration=${duration:-0}
+    
+    if [ "$duration" -ne 0 ]; then
+        echo -n "FPS (1-30, default 5): "
+        read fps
+        fps=${fps:-5}
+    fi
+    
+    send_fastsam_request "point" "x=$x,y=$y" "$duration" "$fps"
+}
+
+# FastSAM Box Mode
+fastsam_box_mode() {
+    clear
+    print_header "  FastSAM - Box Mode"
+    echo ""
+    echo -e "${YELLOW}Segment everything inside a bounding box${NC}"
+    echo ""
+    
+    echo -n "Box coordinates x1,y1,x2,y2 (default 200,150,700,450): "
+    read box
+    box=${box:-200,150,700,450}
+    
+    echo -n "Duration in seconds (-1 for streaming, 0 for single frame): "
+    read duration
+    duration=${duration:-0}
+    
+    if [ "$duration" -ne 0 ]; then
+        echo -n "FPS (1-30, default 5): "
+        read fps
+        fps=${fps:-5}
+    fi
+    
+    send_fastsam_request "box" "box=$box" "$duration" "$fps"
+}
+
+# FastSAM Multiple Points Mode
+fastsam_points_mode() {
+    clear
+    print_header "  FastSAM - Multiple Points Mode"
+    echo ""
+    echo -e "${YELLOW}Use multiple foreground/background points${NC}"
+    echo ""
+    
+    echo -n "Points x1,y1,x2,y2,... (default 480,270): "
+    read points
+    points=${points:-480,270}
+    
+    echo -n "Labels 1,1,0,... (1=fg, 0=bg, default 1): "
+    read labels
+    labels=${labels:-1}
+    
+    echo -n "Duration in seconds (-1 for streaming, 0 for single frame): "
+    read duration
+    duration=${duration:-0}
+    
+    if [ "$duration" -ne 0 ]; then
+        echo -n "FPS (1-30, default 5): "
+        read fps
+        fps=${fps:-5}
+    fi
+    
+    send_fastsam_request "points" "points=$points,labels=$labels" "$duration" "$fps"
+}
+
+# FastSAM Everything Mode
+fastsam_everything_mode() {
+    clear
+    print_header "  FastSAM - Everything Mode"
+    echo ""
+    echo -e "${YELLOW}Automatically segment all objects${NC}"
+    echo ""
+    
+    echo -n "Duration in seconds (-1 for streaming, 0 for single frame): "
+    read duration
+    duration=${duration:-0}
+    
+    if [ "$duration" -ne 0 ]; then
+        echo -n "FPS (1-30, default 5): "
+        read fps
+        fps=${fps:-5}
+    fi
+    
+    send_fastsam_request "everything" "" "$duration" "$fps"
+}
+
+# FastSAM Text Mode (NEW!)
+fastsam_text_mode() {
+    clear
+    print_header "  FastSAM - Text Mode"
+    echo ""
+    echo -e "${YELLOW}Segment using natural language description${NC}"
+    echo ""
+    echo "Examples:"
+    echo "  - 'a photo of a dog'"
+    echo "  - 'the yellow car'"
+    echo "  - 'person wearing red shirt'"
+    echo ""
+    
+    echo -n "Enter text description: "
+    read text
+    
+    if [ -z "$text" ]; then
+        print_error "No text provided"
+        sleep 2
+        return
+    fi
+    
+    echo -n "Duration in seconds (-1 for streaming, 0 for single frame): "
+    read duration
+    duration=${duration:-0}
+    
+    if [ "$duration" -ne 0 ]; then
+        echo -n "FPS (1-30, default 5): "
+        read fps
+        fps=${fps:-5}
+    fi
+    
+    send_fastsam_request "text" "text=$text" "$duration" "$fps"
+}
+
+# Function to send FastSAM request
+send_fastsam_request() {
+    local mode=$1
+    local params=$2
+    local duration=$3
+    local fps=$4
+    
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    
+    # Build request
+    local request="fastsam:"
+    
+    if [ -z "$params" ]; then
+        request="${request}prompt_type=${mode}"
+    else
+        request="${request}prompt_type=${mode},${params}"
+    fi
+    
+    # Add streaming parameters
+    if [ "$duration" -eq -1 ]; then
+        request="${request},stream=true,duration=999999,fps=${fps}"
+        echo -e "${MAGENTA}🔄 Starting CONTINUOUS streaming @ ${fps} FPS${NC}"
+        echo -e "${YELLOW}   Use option 9 to stop${NC}"
+    elif [ "$duration" -gt 0 ]; then
+        request="${request},stream=true,duration=${duration},fps=${fps}"
+        echo -e "${MAGENTA}🎬 Starting streaming: ${duration}s @ ${fps} FPS${NC}"
+    else
+        echo -e "${GREEN}📸 Processing single frame${NC}"
+    fi
+    
+    echo ""
+    echo -e "${BLUE}Request:${NC} $request"
+    echo ""
+    
+    # Send request
+    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+        "data: '$request'" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        print_success "Request sent successfully!"
+        echo ""
+        print_info "Watch results in RViz: /cv_pipeline/visualization"
+        
+        if [ "$duration" -ne 0 ]; then
+            print_info "Monitor: ros2 topic echo /cv_pipeline/results"
+        fi
+    else
+        print_error "Failed to send request"
+        print_warning "Is the CV Pipeline server running?"
+    fi
+    
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "Press Enter to continue..."
+    read
+}
+
 # Function to send SAM2 request
 send_sam2_request() {
     local mode=$1
@@ -411,7 +655,10 @@ while true; do
         1)
             show_sam2_menu
             ;;
-        2|3|4)
+        2)
+            show_fastsam_menu
+            ;;
+        3|4|5)
             clear
             print_warning "Model not yet implemented"
             echo ""

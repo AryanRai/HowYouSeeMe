@@ -24,6 +24,13 @@ except ImportError as e:
     print(f"SAM2 not available: {e}")
     SAM2_AVAILABLE = False
 
+try:
+    from ultralytics import FastSAM
+    FASTSAM_AVAILABLE = True
+except ImportError as e:
+    print(f"FastSAM not available: {e}")
+    FASTSAM_AVAILABLE = False
+
 
 class BaseModel(ABC):
     """Base class for all CV models"""
@@ -417,6 +424,245 @@ class SAM2Model(BaseModel):
             return image
 
 
+class FastSAMModel(BaseModel):
+    """FastSAM Segmentation Model - Faster than SAM2 with text prompts"""
+    
+    def __init__(self, device: str = "cuda"):
+        super().__init__(device)
+        self.model_name = "fastsam"
+        self.model = None
+    
+    def load(self) -> bool:
+        """Load FastSAM model"""
+        if not FASTSAM_AVAILABLE:
+            print("FastSAM not available!")
+            return False
+        
+        try:
+            print(f"Loading FastSAM model on {self.device}...")
+            
+            # Load FastSAM-s (smaller, faster)
+            self.model = FastSAM("FastSAM-s.pt")
+            
+            self.loaded = True
+            print("✅ FastSAM model loaded and ready!")
+            return True
+            
+        except Exception as e:
+            print(f"Failed to load FastSAM: {e}")
+            return False
+    
+    def get_supported_modes(self) -> List[str]:
+        """Return supported FastSAM modes"""
+        return ["everything", "box", "point", "points", "text"]
+    
+    def process(self, image: np.ndarray, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Process image with FastSAM"""
+        if not self.loaded:
+            return {"error": "Model not loaded"}
+        
+        start_time = time.time()
+        
+        try:
+            prompt_type = params.get("prompt_type", "everything")
+            
+            # Run inference based on prompt type
+            if prompt_type == "everything":
+                results = self.model(image, device=self.device, retina_masks=True, 
+                                   imgsz=1024, conf=0.4, iou=0.9)
+            
+            elif prompt_type == "box":
+                box_str = params.get("box", "0,0,100,100")
+                box = [int(x) for x in box_str.split(",")]
+                results = self.model(image, bboxes=[box], device=self.device)
+            
+            elif prompt_type == "point":
+                x = int(params.get("x", image.shape[1]//2))
+                y = int(params.get("y", image.shape[0]//2))
+                results = self.model(image, points=[[x, y]], labels=[1], device=self.device)
+            
+            elif prompt_type == "points":
+                points_str = params.get("points", f"{image.shape[1]//2},{image.shape[0]//2}")
+                coords = [int(x) for x in points_str.split(",")]
+                points = np.array(coords).reshape(-1, 2).tolist()
+                
+                labels_str = params.get("labels", ",".join(["1"] * len(points)))
+                labels = [int(x) for x in labels_str.split(",")]
+                
+                results = self.model(image, points=points, labels=labels, device=self.device)
+            
+            elif prompt_type == "text":
+                text = params.get("text", "object")
+                results = self.model(image, texts=text, device=self.device)
+            
+            else:
+                results = self.model(image, device=self.device)
+            
+            # Extract masks and info
+            result_data = results[0]  # First result
+            masks = result_data.masks.data.cpu().numpy() if result_data.masks is not None else []
+            
+            # Build result
+            result = {
+                "model": self.model_name,
+                "prompt_type": prompt_type,
+                "prompt_data": self._get_prompt_data(params, prompt_type, image.shape),
+                "num_masks": len(masks),
+                "processing_time": time.time() - start_time,
+                "device": self.device,
+                "image_size": [image.shape[1], image.shape[0]],
+                "masks": masks,
+            }
+            
+            # Add mask statistics
+            mask_stats = []
+            for i, mask in enumerate(masks):
+                bbox = self._get_bbox(mask)
+                stats = {
+                    "id": i,
+                    "area": int(np.sum(mask)),
+                    "bbox": bbox,
+                }
+                mask_stats.append(stats)
+            
+            result["mask_stats"] = mask_stats
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "error": str(e),
+                "processing_time": time.time() - start_time
+            }
+    
+    def _get_prompt_data(self, params: Dict, prompt_type: str, shape: tuple) -> Dict:
+        """Extract prompt data for visualization"""
+        if prompt_type == "point":
+            return {"point": [int(params.get("x", shape[1]//2)), int(params.get("y", shape[0]//2))]}
+        elif prompt_type == "box":
+            box_str = params.get("box", "0,0,100,100")
+            return {"box": [int(x) for x in box_str.split(",")]}
+        elif prompt_type == "points":
+            points_str = params.get("points", f"{shape[1]//2},{shape[0]//2}")
+            coords = [int(x) for x in points_str.split(",")]
+            points = np.array(coords).reshape(-1, 2).tolist()
+            labels_str = params.get("labels", ",".join(["1"] * len(points)))
+            labels = [int(x) for x in labels_str.split(",")]
+            return {"points": points, "labels": labels}
+        elif prompt_type == "text":
+            return {"text": params.get("text", "object")}
+        return {}
+    
+    def _get_bbox(self, mask: np.ndarray) -> List[int]:
+        """Get bounding box from mask"""
+        if not np.any(mask):
+            return [0, 0, 0, 0]
+        
+        rows = np.any(mask, axis=1)
+        cols = np.any(mask, axis=0)
+        
+        y_min, y_max = np.where(rows)[0][[0, -1]]
+        x_min, x_max = np.where(cols)[0][[0, -1]]
+        
+        return [int(x_min), int(y_min), int(x_max - x_min), int(y_max - y_min)]
+    
+    def visualize(self, image: np.ndarray, result: Dict[str, Any], params: Dict[str, Any]) -> np.ndarray:
+        """Create visualization with FastSAM masks"""
+        try:
+            vis_image = image.copy()
+            h, w = vis_image.shape[:2]
+            
+            masks = result.get("masks", [])
+            prompt_type = result.get("prompt_type", "everything")
+            
+            if len(masks) == 0:
+                return vis_image
+            
+            # Resize masks to match image dimensions if needed
+            resized_masks = []
+            for i, mask in enumerate(masks):
+                try:
+                    mask_h, mask_w = mask.shape[:2]
+                    if mask_h != h or mask_w != w:
+                        # Resize mask to match image
+                        print(f"Resizing mask {i} from {mask_h}x{mask_w} to {h}x{w}")
+                        resized_mask = cv2.resize(mask.astype(np.float32), (w, h), 
+                                                interpolation=cv2.INTER_NEAREST)
+                        resized_masks.append(resized_mask > 0.5)
+                    else:
+                        resized_masks.append(mask.astype(bool))
+                except Exception as e:
+                    print(f"Error resizing mask {i}: {e}, mask shape: {mask.shape}, target: {h}x{w}")
+                    continue
+            
+            # For everything mode, show multiple masks
+            if prompt_type == "everything" and len(resized_masks) > 1:
+                colors = [
+                    (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0),
+                    (255, 0, 255), (0, 255, 255), (128, 0, 255), (255, 128, 0),
+                ]
+                
+                for i, mask_bool in enumerate(resized_masks[:10]):  # Limit to 10
+                    if np.sum(mask_bool) < 100:
+                        continue
+                    
+                    color = colors[i % len(colors)]
+                    color_np = np.array(color, dtype=np.uint8)
+                    
+                    overlay = vis_image.copy()
+                    overlay[mask_bool] = (overlay[mask_bool] * 0.5 + color_np * 0.5).astype(np.uint8)
+                    vis_image = cv2.addWeighted(vis_image, 0.7, overlay, 0.3, 0)
+                    
+                    contours, _ = cv2.findContours(mask_bool.astype(np.uint8), 
+                                                   cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    cv2.drawContours(vis_image, contours, -1, color, 2)
+                
+                text = f"FastSAM [{prompt_type}] {len(resized_masks)} objects"
+            else:
+                # Single mask visualization
+                mask_bool = resized_masks[0]
+                color = np.array([0, 255, 0], dtype=np.uint8)
+                
+                overlay = vis_image.copy()
+                overlay[mask_bool] = (overlay[mask_bool] * 0.5 + color * 0.5).astype(np.uint8)
+                vis_image = cv2.addWeighted(vis_image, 0.6, overlay, 0.4, 0)
+                
+                contours, _ = cv2.findContours(mask_bool.astype(np.uint8), 
+                                               cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                cv2.drawContours(vis_image, contours, -1, (0, 255, 0), 2)
+                
+                text = f"FastSAM [{prompt_type}]"
+                if prompt_type == "text":
+                    text += f" '{result.get('prompt_data', {}).get('text', '')}'"
+            
+            # Draw prompts
+            prompt_data = result.get("prompt_data", {})
+            if "point" in prompt_data:
+                point = prompt_data["point"]
+                cv2.circle(vis_image, tuple(point), 8, (255, 0, 0), -1)
+                cv2.circle(vis_image, tuple(point), 10, (255, 255, 255), 2)
+            elif "box" in prompt_data:
+                box = prompt_data["box"]
+                cv2.rectangle(vis_image, (box[0], box[1]), (box[2], box[3]), (255, 0, 0), 2)
+            elif "points" in prompt_data:
+                points = prompt_data["points"]
+                labels = prompt_data.get("labels", [1] * len(points))
+                for point, label in zip(points, labels):
+                    color = (255, 0, 0) if label == 1 else (0, 0, 255)
+                    cv2.circle(vis_image, tuple(point), 8, color, -1)
+                    cv2.circle(vis_image, tuple(point), 10, (255, 255, 255), 2)
+            
+            # Add text
+            cv2.putText(vis_image, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+            cv2.putText(vis_image, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 1)
+            
+            return vis_image
+            
+        except Exception as e:
+            print(f"FastSAM visualization error: {e}")
+            return image
+
+
 class ModelManager:
     """Manages multiple CV models and their activation"""
     
@@ -433,6 +679,10 @@ class ModelManager:
         # SAM2
         if SAM2_AVAILABLE:
             self.models["sam2"] = SAM2Model(self.device)
+        
+        # FastSAM
+        if FASTSAM_AVAILABLE:
+            self.models["fastsam"] = FastSAMModel(self.device)
         
         # Add more models here in the future:
         # self.models["depth_anything"] = DepthAnythingModel(self.device)
