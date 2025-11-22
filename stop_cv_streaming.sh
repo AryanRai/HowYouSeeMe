@@ -21,7 +21,11 @@ ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✅ Stop command sent successfully!${NC}"
     echo ""
-    echo "Streaming should stop within 1-2 seconds."
+    echo "Streaming stopped. Server entering 0.5s cooldown period..."
+    echo "This allows the image pipeline to stabilize."
+    echo ""
+    sleep 0.6
+    echo -e "${GREEN}✅ Cooldown complete - ready for new requests${NC}"
 else
     echo -e "${RED}❌ Failed to send stop command${NC}"
     echo ""

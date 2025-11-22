@@ -25,11 +25,13 @@ except ImportError as e:
     SAM2_AVAILABLE = False
 
 try:
-    from ultralytics import FastSAM
+    from ultralytics import FastSAM, YOLO
     FASTSAM_AVAILABLE = True
+    YOLO_AVAILABLE = True
 except ImportError as e:
-    print(f"FastSAM not available: {e}")
+    print(f"Ultralytics not available: {e}")
     FASTSAM_AVAILABLE = False
+    YOLO_AVAILABLE = False
 
 
 class BaseModel(ABC):
@@ -663,6 +665,217 @@ class FastSAMModel(BaseModel):
             return image
 
 
+class YOLO11Model(BaseModel):
+    """YOLO11 Multi-Task Model - Detection, Pose, Segmentation, OBB"""
+    
+    def __init__(self, device: str = "cuda"):
+        super().__init__(device)
+        self.model_name = "yolo11"
+        self.models = {}  # Store different task models
+    
+    def load(self) -> bool:
+        """Load YOLO11 models"""
+        if not YOLO_AVAILABLE:
+            print("YOLO not available!")
+            return False
+        
+        try:
+            print(f"Loading YOLO11 models on {self.device}...")
+            
+            # Load different task models (nano versions for speed)
+            self.models["detect"] = YOLO("yolo11n.pt")  # Detection
+            self.models["segment"] = YOLO("yolo11n-seg.pt")  # Segmentation
+            self.models["pose"] = YOLO("yolo11n-pose.pt")  # Pose estimation
+            self.models["obb"] = YOLO("yolo11n-obb.pt")  # Oriented bounding boxes
+            
+            self.loaded = True
+            print("✅ YOLO11 models loaded and ready!")
+            return True
+            
+        except Exception as e:
+            print(f"Failed to load YOLO11: {e}")
+            return False
+    
+    def get_supported_modes(self) -> List[str]:
+        """Return supported YOLO11 modes"""
+        return ["detect", "segment", "pose", "obb"]
+    
+    def process(self, image: np.ndarray, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Process image with YOLO11"""
+        if not self.loaded:
+            return {"error": "Model not loaded"}
+        
+        start_time = time.time()
+        
+        try:
+            task = params.get("task", "detect")
+            conf = float(params.get("conf", 0.25))
+            iou = float(params.get("iou", 0.7))
+            
+            if task not in self.models:
+                return {"error": f"Unknown task: {task}"}
+            
+            # Run inference
+            model = self.models[task]
+            results = model(image, conf=conf, iou=iou, device=self.device, verbose=False)
+            result_data = results[0]
+            
+            # Build result based on task
+            result = {
+                "model": self.model_name,
+                "task": task,
+                "processing_time": time.time() - start_time,
+                "device": self.device,
+                "image_size": [image.shape[1], image.shape[0]],
+                "conf_threshold": conf,
+                "iou_threshold": iou,
+            }
+            
+            if task == "detect":
+                result.update(self._process_detection(result_data))
+            elif task == "segment":
+                result.update(self._process_segmentation(result_data))
+            elif task == "pose":
+                result.update(self._process_pose(result_data))
+            elif task == "obb":
+                result.update(self._process_obb(result_data))
+            
+            # Store results for visualization (not for JSON)
+            result["_yolo_results"] = result_data  # Underscore prefix = internal use only
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "error": str(e),
+                "processing_time": time.time() - start_time
+            }
+    
+    def _process_detection(self, results) -> Dict:
+        """Process detection results"""
+        boxes = results.boxes
+        detections = []
+        
+        if boxes is not None and len(boxes) > 0:
+            for box in boxes:
+                det = {
+                    "bbox": box.xyxy[0].cpu().numpy().tolist(),
+                    "confidence": float(box.conf[0]),
+                    "class_id": int(box.cls[0]),
+                    "class_name": results.names[int(box.cls[0])]
+                }
+                detections.append(det)
+        
+        return {
+            "num_detections": len(detections),
+            "detections": detections
+        }
+    
+    def _process_segmentation(self, results) -> Dict:
+        """Process segmentation results"""
+        boxes = results.boxes
+        masks = results.masks
+        
+        detections = []
+        mask_data = []
+        
+        if boxes is not None and len(boxes) > 0:
+            for i, box in enumerate(boxes):
+                det = {
+                    "bbox": box.xyxy[0].cpu().numpy().tolist(),
+                    "confidence": float(box.conf[0]),
+                    "class_id": int(box.cls[0]),
+                    "class_name": results.names[int(box.cls[0])],
+                    "mask_id": i
+                }
+                detections.append(det)
+                
+                if masks is not None:
+                    mask = masks.data[i].cpu().numpy()
+                    mask_data.append(mask)
+        
+        return {
+            "num_detections": len(detections),
+            "detections": detections,
+            "masks": mask_data
+        }
+    
+    def _process_pose(self, results) -> Dict:
+        """Process pose estimation results"""
+        boxes = results.boxes
+        keypoints = results.keypoints
+        
+        detections = []
+        
+        if boxes is not None and len(boxes) > 0:
+            for i, box in enumerate(boxes):
+                det = {
+                    "bbox": box.xyxy[0].cpu().numpy().tolist(),
+                    "confidence": float(box.conf[0]),
+                    "class_id": int(box.cls[0]),
+                    "class_name": results.names[int(box.cls[0])]
+                }
+                
+                if keypoints is not None:
+                    kpts = keypoints.data[i].cpu().numpy()
+                    det["keypoints"] = kpts.tolist()
+                    det["num_keypoints"] = len(kpts)
+                
+                detections.append(det)
+        
+        return {
+            "num_detections": len(detections),
+            "detections": detections
+        }
+    
+    def _process_obb(self, results) -> Dict:
+        """Process oriented bounding box results"""
+        obb = results.obb
+        
+        detections = []
+        
+        if obb is not None and len(obb) > 0:
+            for box in obb:
+                det = {
+                    "obb": box.xyxyxyxy[0].cpu().numpy().tolist(),  # 4 corner points
+                    "confidence": float(box.conf[0]),
+                    "class_id": int(box.cls[0]),
+                    "class_name": results.names[int(box.cls[0])]
+                }
+                detections.append(det)
+        
+        return {
+            "num_detections": len(detections),
+            "detections": detections
+        }
+    
+    def visualize(self, image: np.ndarray, result: Dict[str, Any], params: Dict[str, Any]) -> np.ndarray:
+        """Create visualization with YOLO11 results"""
+        try:
+            # Use YOLO's built-in visualization
+            yolo_results = result.get("_yolo_results")  # Internal results object
+            if yolo_results is not None:
+                vis_image = yolo_results.plot()
+                
+                # Add task info
+                task = result.get("task", "detect")
+                num_det = result.get("num_detections", 0)
+                text = f"YOLO11 [{task}] {num_det} objects"
+                
+                cv2.putText(vis_image, text, (10, 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                cv2.putText(vis_image, text, (10, 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 1)
+                
+                return vis_image
+            
+            return image
+            
+        except Exception as e:
+            print(f"YOLO11 visualization error: {e}")
+            return image
+
+
 class ModelManager:
     """Manages multiple CV models and their activation"""
     
@@ -684,9 +897,12 @@ class ModelManager:
         if FASTSAM_AVAILABLE:
             self.models["fastsam"] = FastSAMModel(self.device)
         
+        # YOLO11
+        if YOLO_AVAILABLE:
+            self.models["yolo11"] = YOLO11Model(self.device)
+        
         # Add more models here in the future:
         # self.models["depth_anything"] = DepthAnythingModel(self.device)
-        # self.models["yolo"] = YOLOModel(self.device)
         # self.models["dino"] = DINOModel(self.device)
     
     def list_models(self) -> List[str]:

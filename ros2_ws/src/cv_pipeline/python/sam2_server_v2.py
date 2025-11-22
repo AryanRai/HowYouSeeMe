@@ -27,6 +27,7 @@ class CVPipelineServer(Node):
         # Latest images
         self.latest_rgb = None
         self.latest_depth = None
+        self.last_processed_time = 0  # Track last processing time
         
         # Streaming mode
         self.streaming = False
@@ -34,6 +35,8 @@ class CVPipelineServer(Node):
         self.stream_end_time = None
         self.stream_params = {}
         self.stream_model = "sam2"
+        self.processing_frame = False  # Flag to prevent blocking
+        self.cooldown_until = 0  # Cooldown period after stopping
         
         # Subscribers
         self.rgb_sub = self.create_subscription(
@@ -87,7 +90,7 @@ class CVPipelineServer(Node):
     def request_callback(self, msg):
         """Process model request"""
         self.get_logger().info(f'Request received: {msg.data}')
-        self.get_logger().debug(f'Current streaming state: {self.streaming}')
+        self.get_logger().debug(f'Current streaming state: {self.streaming}, Timer: {self.stream_timer is not None}')
         
         # Check if we have images
         if self.latest_rgb is None:
@@ -105,7 +108,7 @@ class CVPipelineServer(Node):
                         k, v = param.split('=')
                         params[k.strip()] = v.strip()
             
-            # Handle special commands
+            # Handle special commands (these bypass cooldown)
             if 'list_models' in params:
                 self.list_models()
                 return
@@ -114,17 +117,34 @@ class CVPipelineServer(Node):
                 self.get_model_info(model_name)
                 return
             
-            # Check for streaming mode
+            # Check for stop streaming (bypass cooldown)
+            if params.get('stop') == 'true':
+                self.stop_streaming()
+                return
+            
+            # Check for force reset (bypass cooldown)
+            if params.get('reset') == 'true':
+                self.force_reset()
+                return
+            
+            # Check for streaming mode (bypass cooldown - it handles its own cleanup)
             if 'stream' in params:
                 duration = float(params.get('duration', 10.0))
                 fps = float(params.get('fps', 5.0))
                 self.start_streaming(model_name, params, duration, fps)
                 return
             
-            # Check for stop streaming
-            if params.get('stop') == 'true':
-                self.stop_streaming()
+            # Check cooldown period (only for single-frame processing)
+            if time.time() < self.cooldown_until:
+                remaining = self.cooldown_until - time.time()
+                self.get_logger().warn(f'In cooldown period, wait {remaining:.1f}s more')
                 return
+            
+            # Ensure we're not in streaming mode
+            if self.streaming:
+                self.get_logger().warn('Still in streaming mode, forcing cleanup...')
+                self.stop_streaming()
+                time.sleep(0.2)  # Give more time for cleanup
             
             # Process single frame
             self.get_logger().debug(f'Processing single frame with model: {model_name}')
@@ -142,6 +162,10 @@ class CVPipelineServer(Node):
             
         except Exception as e:
             self.get_logger().error(f'Request processing error: {e}')
+            # On error, try to reset state
+            if self.streaming:
+                self.get_logger().warn('Error during request, forcing streaming stop')
+                self.stop_streaming()
     
     def process_frame(self, model_name: str, params: dict) -> dict:
         """Process a single frame with specified model"""
@@ -164,9 +188,15 @@ class CVPipelineServer(Node):
             viz_msg.header.frame_id = 'kinect2_rgb_optical_frame'
             self.viz_pub.publish(viz_msg)
         
-        # Remove masks from result (too large for JSON)
+        # Remove non-serializable data from result
+        # Remove masks (too large for JSON)
         if "masks" in result:
             del result["masks"]
+        
+        # Remove internal keys (starting with underscore)
+        keys_to_remove = [k for k in result.keys() if k.startswith('_')]
+        for key in keys_to_remove:
+            del result[key]
         
         return result
     
@@ -200,8 +230,10 @@ class CVPipelineServer(Node):
         if self.streaming:
             self.get_logger().warn('Already streaming! Stopping current stream first.')
             self.stop_streaming()
-            # Give it a moment to clean up
-            time.sleep(0.1)
+            # Wait for cleanup AND cooldown
+            time.sleep(0.6)  # Wait for cooldown period
+            # Clear cooldown since we're starting a new stream
+            self.cooldown_until = 0
         
         self.streaming = True
         self.stream_model = model_name
@@ -228,27 +260,48 @@ class CVPipelineServer(Node):
     
     def stop_streaming(self):
         """Stop streaming mode"""
-        if not self.streaming:
+        if not self.streaming and self.stream_timer is None:
             self.get_logger().warn('Not currently streaming')
             return
         
+        self.get_logger().info('Stopping streaming...')
+        
+        # Set flag first to stop new processing
         self.streaming = False
         
-        # Cancel and destroy timer
-        if self.stream_timer:
-            self.stream_timer.cancel()
-            self.destroy_timer(self.stream_timer)
-            self.stream_timer = None
+        # Wait for any in-progress frame to complete
+        max_wait = 50  # 50 * 0.01 = 0.5 seconds max
+        wait_count = 0
+        while self.processing_frame and wait_count < max_wait:
+            time.sleep(0.01)
+            wait_count += 1
         
-        # Reset streaming state
+        if self.processing_frame:
+            self.get_logger().warn('Frame still processing after timeout, forcing stop')
+            self.processing_frame = False
+        
+        # Cancel and destroy timer with retry
+        if self.stream_timer:
+            try:
+                self.stream_timer.cancel()
+                self.destroy_timer(self.stream_timer)
+                self.get_logger().debug('Timer destroyed successfully')
+            except Exception as e:
+                self.get_logger().warn(f'Timer cleanup error: {e}')
+            finally:
+                self.stream_timer = None
+        
+        # Reset streaming state completely
         self.stream_end_time = None
         self.stream_params = {}
         self.stream_model = "sam2"
         
-        self.get_logger().info('⏹️  Streaming stopped and state reset')
+        # Set cooldown period to let image pipeline stabilize
+        self.cooldown_until = time.time() + 0.5  # 500ms cooldown
+        self.get_logger().info('⏹️  Streaming stopped, entering 0.5s cooldown period')
         
         # Publish status
-        status = {"status": "streaming_stopped"}
+        status = {"status": "streaming_stopped", "cooldown": 0.5}
         status_msg = String()
         status_msg.data = json.dumps(status)
         self.result_pub.publish(status_msg)
@@ -270,13 +323,26 @@ class CVPipelineServer(Node):
             self.stop_streaming()
             return
         
+        # Skip if still processing previous frame (non-blocking)
+        if self.processing_frame:
+            self.get_logger().debug('Still processing previous frame, skipping...')
+            return
+        
         # Check if we have images
         if self.latest_rgb is None:
             self.get_logger().debug('No RGB image available for streaming')
             return
         
+        # Throttle processing to avoid overwhelming the pipeline
+        current_time = time.time()
+        if current_time - self.last_processed_time < 0.05:  # Min 50ms between frames
+            self.get_logger().debug('Throttling: too soon since last frame')
+            return
+        
         # Process frame
         try:
+            self.processing_frame = True
+            self.last_processed_time = current_time
             result = self.process_frame(self.stream_model, self.stream_params)
             
             # Add streaming info
@@ -295,6 +361,46 @@ class CVPipelineServer(Node):
             self.get_logger().error(f'Stream processing error: {e}')
             # On error, stop streaming to prevent continuous errors
             self.stop_streaming()
+        finally:
+            self.processing_frame = False
+    
+    def force_reset(self):
+        """Force reset the server state"""
+        self.get_logger().warn('🔄 Force resetting server state...')
+        
+        # Stop streaming forcefully
+        self.streaming = False
+        self.processing_frame = False
+        
+        # Destroy timer if exists
+        if self.stream_timer:
+            try:
+                self.stream_timer.cancel()
+                self.destroy_timer(self.stream_timer)
+            except:
+                pass
+            self.stream_timer = None
+        
+        # Reset all state
+        self.stream_end_time = None
+        self.stream_params = {}
+        self.stream_model = "sam2"
+        self.cooldown_until = 0
+        self.last_processed_time = 0
+        
+        # Clear any cached data
+        if hasattr(self, 'model_manager'):
+            # Force garbage collection
+            import gc
+            gc.collect()
+        
+        self.get_logger().info('✅ Server state reset complete')
+        
+        # Publish status
+        status = {"status": "force_reset_complete"}
+        status_msg = String()
+        status_msg.data = json.dumps(status)
+        self.result_pub.publish(status_msg)
 
 
 def main(args=None):

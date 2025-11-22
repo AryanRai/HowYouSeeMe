@@ -83,15 +83,18 @@ show_main_menu() {
     echo ""
     echo "  1) 🎯 SAM2 - Segment Anything Model 2"
     echo "  2) ⚡ FastSAM - Faster SAM with Text Prompts"
-    echo "  3) 📊 [Future] Depth Anything"
-    echo "  4) 🔍 [Future] YOLO Object Detection"
+    echo "  3) 🔍 YOLO11 - Detection, Pose, Segmentation, OBB"
+    echo "  4) 📊 [Future] Depth Anything"
     echo "  5) 🧠 [Future] DINO Features"
     echo ""
     echo -e "${CYAN}System Commands:${NC}"
     echo "  8) 📋 List Available Models"
     echo "  9) 🛑 Stop Active Streaming"
     echo ""
-    echo -e "${YELLOW}Tip: Press Ctrl+C anytime to stop streaming${NC}"
+    echo -e "${YELLOW}Tips:${NC}"
+    echo "  • Press Ctrl+C anytime to stop streaming"
+    echo "  • You can switch between streaming models instantly!"
+    echo "  • Cooldown only affects single-frame processing"
     echo ""
     echo "  0) 🚪 Exit"
     echo ""
@@ -528,6 +531,216 @@ send_fastsam_request() {
     read
 }
 
+# Function to show YOLO11 menu
+show_yolo11_menu() {
+    while true; do
+        clear
+        print_header "  YOLO11 - Multi-Task Vision Model"
+        echo ""
+        echo -e "${MAGENTA}Select Task:${NC}"
+        echo ""
+        echo "  1) 🔍 Detection - Detect objects with bounding boxes"
+        echo "  2) 🎭 Segmentation - Instance segmentation masks"
+        echo "  3) 🧍 Pose Estimation - Human pose keypoints"
+        echo "  4) 📐 OBB - Oriented bounding boxes"
+        echo ""
+        echo "  0) ⬅️  Back to Model Selection"
+        echo ""
+        echo -n "Select task: "
+        read choice
+        
+        case $choice in
+            1)
+                yolo11_detection
+                ;;
+            2)
+                yolo11_segmentation
+                ;;
+            3)
+                yolo11_pose
+                ;;
+            4)
+                yolo11_obb
+                ;;
+            0)
+                return
+                ;;
+            *)
+                print_error "Invalid option"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# YOLO11 Detection
+yolo11_detection() {
+    clear
+    print_header "  YOLO11 - Object Detection"
+    echo ""
+    echo -e "${YELLOW}Detect objects with bounding boxes${NC}"
+    echo ""
+    
+    echo -n "Confidence threshold (0.0-1.0, default 0.25): "
+    read conf
+    conf=${conf:-0.25}
+    
+    echo -n "IOU threshold (0.0-1.0, default 0.7): "
+    read iou
+    iou=${iou:-0.7}
+    
+    echo -n "Duration in seconds (-1 for streaming, 0 for single frame): "
+    read duration
+    duration=${duration:-0}
+    
+    if [ "$duration" -ne 0 ]; then
+        echo -n "FPS (1-30, default 10): "
+        read fps
+        fps=${fps:-10}
+    fi
+    
+    send_yolo11_request "detect" "conf=$conf,iou=$iou" "$duration" "$fps"
+}
+
+# YOLO11 Segmentation
+yolo11_segmentation() {
+    clear
+    print_header "  YOLO11 - Instance Segmentation"
+    echo ""
+    echo -e "${YELLOW}Segment objects with masks${NC}"
+    echo ""
+    
+    echo -n "Confidence threshold (0.0-1.0, default 0.25): "
+    read conf
+    conf=${conf:-0.25}
+    
+    echo -n "IOU threshold (0.0-1.0, default 0.7): "
+    read iou
+    iou=${iou:-0.7}
+    
+    echo -n "Duration in seconds (-1 for streaming, 0 for single frame): "
+    read duration
+    duration=${duration:-0}
+    
+    if [ "$duration" -ne 0 ]; then
+        echo -n "FPS (1-30, default 10): "
+        read fps
+        fps=${fps:-10}
+    fi
+    
+    send_yolo11_request "segment" "conf=$conf,iou=$iou" "$duration" "$fps"
+}
+
+# YOLO11 Pose Estimation
+yolo11_pose() {
+    clear
+    print_header "  YOLO11 - Pose Estimation"
+    echo ""
+    echo -e "${YELLOW}Detect human poses with keypoints${NC}"
+    echo ""
+    
+    echo -n "Confidence threshold (0.0-1.0, default 0.25): "
+    read conf
+    conf=${conf:-0.25}
+    
+    echo -n "IOU threshold (0.0-1.0, default 0.7): "
+    read iou
+    iou=${iou:-0.7}
+    
+    echo -n "Duration in seconds (-1 for streaming, 0 for single frame): "
+    read duration
+    duration=${duration:-0}
+    
+    if [ "$duration" -ne 0 ]; then
+        echo -n "FPS (1-30, default 10): "
+        read fps
+        fps=${fps:-10}
+    fi
+    
+    send_yolo11_request "pose" "conf=$conf,iou=$iou" "$duration" "$fps"
+}
+
+# YOLO11 OBB
+yolo11_obb() {
+    clear
+    print_header "  YOLO11 - Oriented Bounding Boxes"
+    echo ""
+    echo -e "${YELLOW}Detect objects with rotated boxes${NC}"
+    echo ""
+    
+    echo -n "Confidence threshold (0.0-1.0, default 0.25): "
+    read conf
+    conf=${conf:-0.25}
+    
+    echo -n "IOU threshold (0.0-1.0, default 0.7): "
+    read iou
+    iou=${iou:-0.7}
+    
+    echo -n "Duration in seconds (-1 for streaming, 0 for single frame): "
+    read duration
+    duration=${duration:-0}
+    
+    if [ "$duration" -ne 0 ]; then
+        echo -n "FPS (1-30, default 10): "
+        read fps
+        fps=${fps:-10}
+    fi
+    
+    send_yolo11_request "obb" "conf=$conf,iou=$iou" "$duration" "$fps"
+}
+
+# Function to send YOLO11 request
+send_yolo11_request() {
+    local task=$1
+    local params=$2
+    local duration=$3
+    local fps=$4
+    
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    
+    # Build request
+    local request="yolo11:task=${task},${params}"
+    
+    # Add streaming parameters
+    if [ "$duration" -eq -1 ]; then
+        request="${request},stream=true,duration=999999,fps=${fps}"
+        echo -e "${MAGENTA}🔄 Starting CONTINUOUS streaming @ ${fps} FPS${NC}"
+        echo -e "${YELLOW}   Use option 9 to stop${NC}"
+    elif [ "$duration" -gt 0 ]; then
+        request="${request},stream=true,duration=${duration},fps=${fps}"
+        echo -e "${MAGENTA}🎬 Starting streaming: ${duration}s @ ${fps} FPS${NC}"
+    else
+        echo -e "${GREEN}📸 Processing single frame${NC}"
+    fi
+    
+    echo ""
+    echo -e "${BLUE}Request:${NC} $request"
+    echo ""
+    
+    # Send request
+    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+        "data: '$request'" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        print_success "Request sent successfully!"
+        echo ""
+        print_info "Watch results in RViz: /cv_pipeline/visualization"
+        
+        if [ "$duration" -ne 0 ]; then
+            print_info "Monitor: ros2 topic echo /cv_pipeline/results"
+        fi
+    else
+        print_error "Failed to send request"
+        print_warning "Is the CV Pipeline server running?"
+    fi
+    
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "Press Enter to continue..."
+    read
+}
+
 # Function to send SAM2 request
 send_sam2_request() {
     local mode=$1
@@ -628,10 +841,14 @@ stop_streaming() {
     if [ $? -eq 0 ]; then
         print_success "Stop command sent successfully!"
         echo ""
-        print_info "Streaming should stop within 1-2 seconds"
+        print_info "Server entering 0.5s cooldown period..."
+        echo "This allows the image pipeline to stabilize."
         echo ""
-        echo "You can verify by checking:"
-        echo "  ros2 topic echo /cv_pipeline/results"
+        sleep 0.6
+        print_success "Cooldown complete - ready for new requests"
+        echo ""
+        print_info "Note: You can start streaming again immediately!"
+        echo "Cooldown only affects single-frame processing."
     else
         print_error "Failed to send stop command"
         echo ""
@@ -658,13 +875,15 @@ while true; do
         2)
             show_fastsam_menu
             ;;
-        3|4|5)
+        3)
+            show_yolo11_menu
+            ;;
+        4|5)
             clear
             print_warning "Model not yet implemented"
             echo ""
             echo "Coming soon:"
             echo "  - Depth Anything: Depth estimation"
-            echo "  - YOLO: Object detection"
             echo "  - DINO: Feature extraction"
             echo ""
             echo "Press Enter to continue..."
