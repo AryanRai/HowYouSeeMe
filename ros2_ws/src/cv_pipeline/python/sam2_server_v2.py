@@ -172,8 +172,12 @@ class CVPipelineServer(Node):
         # Convert BGR to RGB
         rgb_image = self.latest_rgb[:, :, ::-1].copy()
         
-        # Process with model
-        result = self.model_manager.process(model_name, rgb_image, params)
+        # For InsightFace, pass depth image if available
+        if model_name == "insightface" and self.latest_depth is not None:
+            result = self.model_manager.process(model_name, rgb_image, params, depth_image=self.latest_depth)
+        else:
+            # Process with model
+            result = self.model_manager.process(model_name, rgb_image, params)
         
         # Create and publish visualization
         if "error" not in result:

@@ -33,6 +33,13 @@ except ImportError as e:
     FASTSAM_AVAILABLE = False
     YOLO_AVAILABLE = False
 
+try:
+    import insightface
+    INSIGHTFACE_AVAILABLE = True
+except ImportError as e:
+    print(f"InsightFace not available: {e}")
+    INSIGHTFACE_AVAILABLE = False
+
 
 class BaseModel(ABC):
     """Base class for all CV models"""
@@ -876,6 +883,77 @@ class YOLO11Model(BaseModel):
             return image
 
 
+class InsightFaceModel(BaseModel):
+    """InsightFace Model - Face Detection, Recognition, and Liveness"""
+    
+    def __init__(self, device: str = "cuda"):
+        super().__init__(device)
+        self.model_name = "insightface"
+        self.worker = None
+    
+    def load(self) -> bool:
+        """Load InsightFace models"""
+        if not INSIGHTFACE_AVAILABLE:
+            print("InsightFace not available!")
+            return False
+        
+        try:
+            print(f"Loading InsightFace models on {self.device}...")
+            
+            # Import and create worker
+            from insightface_worker import InsightFaceWorker
+            self.worker = InsightFaceWorker(device=self.device)
+            self.worker.load_models(model_pack="buffalo_l")
+            self.worker.prepare(det_size=(640, 640), det_thresh=0.5)
+            
+            self.loaded = True
+            print("✅ InsightFace models loaded and ready!")
+            return True
+            
+        except Exception as e:
+            print(f"Failed to load InsightFace: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    def get_supported_modes(self) -> List[str]:
+        """Return supported InsightFace modes"""
+        return ["detect", "recognize", "detect_recognize", "register", "liveness", "analyze"]
+    
+    def process(self, image: np.ndarray, params: Dict[str, Any], depth_image: Optional[np.ndarray] = None) -> Dict[str, Any]:
+        """Process image with InsightFace"""
+        if not self.loaded:
+            return {"error": "Model not loaded"}
+        
+        try:
+            start_time = time.time()
+            
+            # Process with worker
+            result = self.worker.process(image, params, depth_image)
+            
+            # Add timing
+            result["total_time"] = time.time() - start_time
+            
+            return result
+            
+        except Exception as e:
+            print(f"InsightFace processing error: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"error": str(e)}
+    
+    def visualize(self, image: np.ndarray, result: Dict[str, Any], params: Dict[str, Any]) -> np.ndarray:
+        """Visualize InsightFace results"""
+        if not self.loaded or "error" in result:
+            return image
+        
+        try:
+            return self.worker.visualize(image, result, params)
+        except Exception as e:
+            print(f"InsightFace visualization error: {e}")
+            return image
+
+
 class ModelManager:
     """Manages multiple CV models and their activation"""
     
@@ -900,6 +978,10 @@ class ModelManager:
         # YOLO11
         if YOLO_AVAILABLE:
             self.models["yolo11"] = YOLO11Model(self.device)
+        
+        # InsightFace
+        if INSIGHTFACE_AVAILABLE:
+            self.models["insightface"] = InsightFaceModel(self.device)
         
         # Add more models here in the future:
         # self.models["depth_anything"] = DepthAnythingModel(self.device)
@@ -959,7 +1041,7 @@ class ModelManager:
         # Load new model
         return self.load_model(model_name)
     
-    def process(self, model_name: str, image: np.ndarray, params: Dict[str, Any]) -> Dict[str, Any]:
+    def process(self, model_name: str, image: np.ndarray, params: Dict[str, Any], depth_image: Optional[np.ndarray] = None) -> Dict[str, Any]:
         """Process image with specified model"""
         if model_name not in self.models:
             return {"error": f"Model {model_name} not found"}
@@ -971,7 +1053,11 @@ class ModelManager:
             if not model.load():
                 return {"error": f"Failed to load model {model_name}"}
         
-        return model.process(image, params)
+        # Pass depth_image if model supports it (InsightFace)
+        if model_name == "insightface" and depth_image is not None:
+            return model.process(image, params, depth_image)
+        else:
+            return model.process(image, params)
     
     def visualize(self, model_name: str, image: np.ndarray, result: Dict[str, Any], params: Dict[str, Any]) -> np.ndarray:
         """Create visualization for model results"""

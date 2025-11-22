@@ -84,8 +84,9 @@ show_main_menu() {
     echo "  1) 🎯 SAM2 - Segment Anything Model 2"
     echo "  2) ⚡ FastSAM - Faster SAM with Text Prompts"
     echo "  3) 🔍 YOLO11 - Detection, Pose, Segmentation, OBB"
-    echo "  4) 📊 [Future] Depth Anything"
-    echo "  5) 🧠 [Future] DINO Features"
+    echo "  4) 👤 InsightFace - Face Recognition & Liveness"
+    echo "  5) 📊 [Future] Depth Anything"
+    echo "  6) 🧠 [Future] DINO Features"
     echo ""
     echo -e "${CYAN}System Commands:${NC}"
     echo "  8) 📋 List Available Models"
@@ -826,6 +827,324 @@ list_models() {
 }
 
 # Function to stop streaming
+# Function to show InsightFace menu
+show_insightface_menu() {
+    while true; do
+        clear
+        print_header "  InsightFace - Face Recognition & Liveness"
+        echo ""
+        echo -e "${MAGENTA}Select Mode:${NC}"
+        echo ""
+        echo "  1) 🔍 Detect Faces - Detection only"
+        echo "  2) 👤 Recognize Faces - Full recognition"
+        echo "  3) ➕ Register New Person - Add to database"
+        echo "  4) 🛡️  Check Liveness - Anti-spoofing"
+        echo "  5) 📊 Full Analysis - Everything"
+        echo "  6) 🎬 Stream Recognition - Continuous"
+        echo ""
+        echo "  0) ⬅️  Back to Main Menu"
+        echo ""
+        echo -n "Select option: "
+        
+        read choice
+        
+        case $choice in
+            1)
+                insightface_detect
+                ;;
+            2)
+                insightface_recognize
+                ;;
+            3)
+                insightface_register
+                ;;
+            4)
+                insightface_liveness
+                ;;
+            5)
+                insightface_analyze
+                ;;
+            6)
+                insightface_stream
+                ;;
+            0)
+                return
+                ;;
+            *)
+                print_error "Invalid option"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# InsightFace: Detect Faces
+insightface_detect() {
+    clear
+    print_header "  InsightFace - Detect Faces"
+    echo ""
+    echo -e "${YELLOW}Detect faces and return bounding boxes + landmarks${NC}"
+    echo ""
+    
+    echo -n "Detection size (default 640): "
+    read det_size
+    det_size=${det_size:-640}
+    
+    echo -n "Max faces to detect (0 for unlimited): "
+    read max_num
+    max_num=${max_num:-0}
+    
+    echo ""
+    print_info "Detecting faces..."
+    
+    REQUEST="insightface:mode=detect,det_size=$det_size,max_num=$max_num"
+    
+    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+        "data: '$REQUEST'" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        print_success "Request sent successfully!"
+        echo ""
+        print_info "Watch results in RViz: /cv_pipeline/visualization"
+        print_info "Monitor: ros2 topic echo /cv_pipeline/results"
+    else
+        print_error "Failed to send request"
+    fi
+    
+    echo ""
+    echo "Press Enter to continue..."
+    read
+}
+
+# InsightFace: Recognize Faces
+insightface_recognize() {
+    clear
+    print_header "  InsightFace - Recognize Faces"
+    echo ""
+    echo -e "${YELLOW}Detect and recognize all faces in the scene${NC}"
+    echo ""
+    
+    echo -n "Similarity threshold (0.0-1.0, default 0.6): "
+    read threshold
+    threshold=${threshold:-0.6}
+    
+    echo -n "Detection size (default 640): "
+    read det_size
+    det_size=${det_size:-640}
+    
+    echo ""
+    print_info "Recognizing faces..."
+    
+    REQUEST="insightface:mode=detect_recognize,threshold=$threshold,det_size=$det_size"
+    
+    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+        "data: '$REQUEST'" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        print_success "Request sent successfully!"
+        echo ""
+        print_info "Watch results in RViz: /cv_pipeline/visualization"
+        print_info "Recognized faces will be shown in green"
+        print_info "Unknown faces will be shown in orange"
+    else
+        print_error "Failed to send request"
+    fi
+    
+    echo ""
+    echo "Press Enter to continue..."
+    read
+}
+
+# InsightFace: Register New Person
+insightface_register() {
+    clear
+    print_header "  InsightFace - Register New Person"
+    echo ""
+    echo -e "${YELLOW}Add a new person to the face database${NC}"
+    echo ""
+    echo -e "${CYAN}Instructions:${NC}"
+    echo "  1. Position the person in front of the camera"
+    echo "  2. Ensure good lighting and frontal face"
+    echo "  3. Only one face should be visible"
+    echo "  4. Register 3-5 samples for best accuracy"
+    echo ""
+    
+    echo -n "Person's name (use underscores for spaces): "
+    read name
+    
+    if [ -z "$name" ]; then
+        print_error "Name cannot be empty"
+        echo ""
+        echo "Press Enter to continue..."
+        read
+        return
+    fi
+    
+    echo ""
+    print_info "Registering $name..."
+    echo ""
+    print_warning "Make sure the person is looking at the camera!"
+    sleep 2
+    
+    REQUEST="insightface:mode=register,name=$name"
+    
+    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+        "data: '$REQUEST'" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        print_success "Registration request sent!"
+        echo ""
+        print_info "Check the results to confirm registration"
+        echo ""
+        echo -e "${CYAN}Tip: Register 3-5 samples for better accuracy${NC}"
+        echo "  - Different angles"
+        echo "  - Different lighting"
+        echo "  - Different expressions"
+    else
+        print_error "Failed to send request"
+    fi
+    
+    echo ""
+    echo "Press Enter to continue..."
+    read
+}
+
+# InsightFace: Check Liveness
+insightface_liveness() {
+    clear
+    print_header "  InsightFace - Check Liveness"
+    echo ""
+    echo -e "${YELLOW}Verify if the face is real (anti-spoofing)${NC}"
+    echo ""
+    echo -e "${CYAN}How it works:${NC}"
+    echo "  • Uses Kinect depth data"
+    echo "  • Detects flat surfaces (photos, screens)"
+    echo "  • Real faces have depth variance"
+    echo ""
+    
+    print_info "Checking liveness..."
+    
+    REQUEST="insightface:mode=liveness"
+    
+    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+        "data: '$REQUEST'" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        print_success "Request sent successfully!"
+        echo ""
+        print_info "Result will show:"
+        echo "  • LIVE (green) - Real person detected"
+        echo "  • SPOOF (red) - Photo/screen detected"
+        echo ""
+        print_info "Watch results in RViz: /cv_pipeline/visualization"
+    else
+        print_error "Failed to send request"
+    fi
+    
+    echo ""
+    echo "Press Enter to continue..."
+    read
+}
+
+# InsightFace: Full Analysis
+insightface_analyze() {
+    clear
+    print_header "  InsightFace - Full Analysis"
+    echo ""
+    echo -e "${YELLOW}Complete face analysis: detect + recognize + liveness + attributes${NC}"
+    echo ""
+    
+    echo -n "Similarity threshold (0.0-1.0, default 0.6): "
+    read threshold
+    threshold=${threshold:-0.6}
+    
+    echo ""
+    print_info "Running full analysis..."
+    
+    REQUEST="insightface:mode=analyze,threshold=$threshold"
+    
+    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+        "data: '$REQUEST'" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        print_success "Request sent successfully!"
+        echo ""
+        print_info "Analysis includes:"
+        echo "  • Face detection"
+        echo "  • Face recognition"
+        echo "  • Liveness detection"
+        echo "  • Age estimation"
+        echo "  • Gender detection"
+        echo ""
+        print_info "Watch results in RViz: /cv_pipeline/visualization"
+    else
+        print_error "Failed to send request"
+    fi
+    
+    echo ""
+    echo "Press Enter to continue..."
+    read
+}
+
+# InsightFace: Stream Recognition
+insightface_stream() {
+    clear
+    print_header "  InsightFace - Stream Recognition"
+    echo ""
+    echo -e "${YELLOW}Continuous face recognition${NC}"
+    echo ""
+    
+    echo -n "Similarity threshold (0.0-1.0, default 0.6): "
+    read threshold
+    threshold=${threshold:-0.6}
+    
+    echo -n "Duration in seconds (-1 for continuous, default 30): "
+    read duration
+    duration=${duration:-30}
+    
+    if [ "$duration" = "-1" ]; then
+        duration=999999
+        echo ""
+        print_warning "Starting CONTINUOUS streaming"
+        echo "Use option 9 to stop"
+    fi
+    
+    echo -n "FPS (1-30, default 5): "
+    read fps
+    fps=${fps:-5}
+    
+    echo ""
+    print_info "Starting face recognition stream @ $fps FPS"
+    
+    REQUEST="insightface:mode=detect_recognize,threshold=$threshold,stream=true,duration=$duration,fps=$fps"
+    
+    echo ""
+    echo "Request: $REQUEST"
+    echo ""
+    
+    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+        "data: '$REQUEST'" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        print_success "Streaming started!"
+        echo ""
+        print_info "Watch results in RViz: /cv_pipeline/visualization"
+        print_info "Monitor: ros2 topic echo /cv_pipeline/results"
+        echo ""
+        if [ "$duration" = "999999" ]; then
+            print_warning "Streaming continuously - use option 9 to stop"
+        else
+            print_info "Streaming for $duration seconds"
+        fi
+    else
+        print_error "Failed to start streaming"
+    fi
+    
+    echo ""
+    echo "Press Enter to continue..."
+    read
+}
+
 stop_streaming() {
     clear
     print_header "  Stop Active Streaming"
@@ -878,7 +1197,10 @@ while true; do
         3)
             show_yolo11_menu
             ;;
-        4|5)
+        4)
+            show_insightface_menu
+            ;;
+        5|6)
             clear
             print_warning "Model not yet implemented"
             echo ""
