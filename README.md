@@ -46,6 +46,8 @@ HowYouSeeMe is a **production-ready ROS2-based computer vision system** that pro
 2. **🧠 Advanced Computer Vision Pipeline**
    - **RTABMap SLAM** for production-grade 3D mapping and localization
    - **YOLOv12 (YOLO11)** object detection with GPU acceleration
+   - **SAM2 (Segment Anything Model 2)** for real-time segmentation (optimized for 4GB GPUs)
+   - **Lazy-loaded AI models** triggered on-demand by LLM
    - **Multi-object tracking** with Kalman filtering
    - **ROS2 vision_msgs** for standardized detection publishing
 
@@ -101,10 +103,15 @@ HowYouSeeMe is designed as a **core perception module** for autonomous robotics:
 ## ✨ Key Features
 
 ### 🔍 **Production-Ready Computer Vision**
+- **Kinect v2 Bridge**: Full-featured ROS2 bridge with multiple resolutions (SD/QHD/HD)
+  - 📖 [kinect2_ros2 Setup](docs/Kinect2_ROS2_Bridge_Setup.md) - Proper calibration, filtering, and point clouds
 - **RTABMap SLAM**: Production-grade 3D mapping and localization with loop closure
-  - 📖 [Quick Reference](SLAM_QUICK_REFERENCE.md) | [Performance Optimization](docs/SLAM_Performance_Optimization.md) | [Troubleshooting](docs/SLAM_Troubleshooting.md)
-- **YOLOv12 Detection**: Latest YOLO11 architecture with 80+ object classes
-- **Multi-Object Tracking**: Kalman filter-based tracking with ID persistence
+  - 📖 [Quick Reference](docs/SLAM_QUICK_REFERENCE.md) | [Performance](docs/SLAM_Performance_Optimization.md)
+- **Modular CV Pipeline**: Lazy-loaded AI models for on-demand processing
+  - 📖 [CV Pipeline Guide](CV_PIPELINE_SAM2.md) - SAM2 segmentation optimized for 4GB GPUs
+  - **SAM2 Tiny**: 38.9M parameters, 0.28GB VRAM, ~0.7s per frame
+  - **Lazy Loading**: Models only load when requested by LLM
+  - **CUDA Accelerated**: Works on 4GB GPUs (RTX 3050)
 - **Real-Time Processing**: 14.5 FPS RGB-D with intelligent frame management
 - **GPU Acceleration**: CUDA-optimized processing pipeline
 

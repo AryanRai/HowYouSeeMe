@@ -1,0 +1,32 @@
+# CV Pipeline Model Configuration
+
+models:
+  sam2:
+    enabled: true
+    description: "Segment Anything Model 2 - Optimized for 4GB GPU"
+    model_size: "tiny"  # tiny (38.9M), small (46M), base_plus (80.8M), large (224.4M)
+    vram_usage: "0.28GB"
+    default_params:
+      prompt_type: "point"
+    
+  # Future models can be added here
+  # yolo:
+  #   enabled: false
+  #   description: "YOLO object detection"
+  
+  # depth_anything:
+  #   enabled: false
+  #   description: "Depth estimation"
+
+pipeline:
+  input_topics:
+    rgb: "/kinect2/qhd/image_color"
+    depth: "/kinect2/qhd/image_depth"
+  
+  processing:
+    max_fps: 5.0
+    
+  output_topics:
+    results: "/cv_pipeline/results"
+    visualization: "/cv_pipeline/visualization"
+    model_request: "/cv_pipeline/model_request"
