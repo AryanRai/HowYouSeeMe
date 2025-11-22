@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Launch Kinect + SAM2 Server (Model Pre-loaded)
+# Launch Kinect + CV Pipeline Server V2 (Multi-Model Support)
 
 echo "========================================="
-echo "  Kinect + SAM2 Server"
+echo "  Kinect + CV Pipeline Server V2"
 echo "========================================="
 echo ""
 
@@ -43,14 +43,15 @@ else
     exit 1
 fi
 
-# Launch SAM2 Server
+# Launch CV Pipeline Server V2
 echo ""
-echo "Starting SAM2 Server (loading model, please wait)..."
-python3 ros2_ws/src/cv_pipeline/python/sam2_server.py &
+echo "Starting CV Pipeline Server V2 (loading models, please wait)..."
+echo "Using extensible model manager architecture"
+python3 ros2_ws/src/cv_pipeline/python/sam2_server_v2.py &
 SAM2_PID=$!
 
-# Wait for SAM2 to load
-echo "Waiting for SAM2 model to load (~2-3 seconds)..."
+# Wait for models to load
+echo "Waiting for models to load (~2-3 seconds)..."
 sleep 3
 
 echo ""
@@ -59,17 +60,38 @@ echo "  System Ready!"
 echo "========================================="
 echo ""
 echo "Kinect PID: $KINECT_PID"
-echo "SAM2 Server PID: $SAM2_PID"
+echo "CV Pipeline Server PID: $SAM2_PID"
 echo ""
-echo "SAM2 model is PRE-LOADED and ready!"
+echo "Models are PRE-LOADED and ready!"
 echo ""
-echo "To send a request:"
-echo "  ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \"data: 'sam2:prompt_type=point'\""
+echo "Available Commands:"
 echo ""
-echo "To view results:"
-echo "  ros2 topic echo /cv_pipeline/results"
+echo "  List models:"
+echo "    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \\"
+echo "      \"data: 'sam2:list_models=true'\""
 echo ""
-echo "Processing should be FAST (~0.3-0.5s) since model is already loaded!"
+echo "  SAM2 point mode:"
+echo "    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \\"
+echo "      \"data: 'sam2:prompt_type=point'\""
+echo ""
+echo "  SAM2 box mode:"
+echo "    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \\"
+echo "      \"data: 'sam2:prompt_type=box,box=200,150,700,450'\""
+echo ""
+echo "  SAM2 everything mode:"
+echo "    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \\"
+echo "      \"data: 'sam2:prompt_type=everything'\""
+echo ""
+echo "  Start streaming:"
+echo "    ./start_sam2_stream.sh 10 5"
+echo ""
+echo "  View all modes:"
+echo "    ./sam2_modes_guide.sh"
+echo ""
+echo "  View results:"
+echo "    ros2 topic echo /cv_pipeline/results"
+echo ""
+echo "Processing is FAST (~0.1-0.3s) since models are pre-loaded!"
 echo ""
 echo "Press Ctrl+C to stop all processes"
 echo ""

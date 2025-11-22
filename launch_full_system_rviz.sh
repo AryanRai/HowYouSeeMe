@@ -1,6 +1,7 @@
 #!/bin/bash
-# Launch Complete System: Kinect + SLAM + SAM2 Server + RViz
+# Launch Complete System: Kinect + SLAM + SAM2 Server V2 + RViz
 # Shows SLAM map, point clouds, and SAM2 segmentation visualizations
+# WITH CORRECTED COORDINATE FRAME ORIENTATION
 
 # Set library path for libfreenect2
 export LD_LIBRARY_PATH=/home/aryan/Documents/GitHub/HowYouSeeMe/libfreenect2/freenect2/lib:$LD_LIBRARY_PATH
@@ -16,8 +17,14 @@ echo ""
 echo "Components:"
 echo "  1. Kinect v2 RGB-D Camera"
 echo "  2. RTABMap SLAM (3D Mapping)"
-echo "  3. SAM2 Server (Segmentation)"
+echo "  3. CV Pipeline Server V2 (Multi-Model)"
 echo "  4. RViz2 (Visualization)"
+echo ""
+echo "Features:"
+echo "  - Corrected coordinate frames"
+echo "  - Extensible model architecture"
+echo "  - SAM2 with multiple modes"
+echo "  - Streaming support"
 echo ""
 echo "=========================================="
 echo ""
@@ -124,15 +131,16 @@ RTABMAP_PID=$!
 echo "    PID: $RTABMAP_PID"
 sleep 3
 
-# 3. Start SAM2 Server
+# 3. Start CV Pipeline Server V2
 echo ""
-echo "4/5 Starting SAM2 Server (loading model)..."
-echo "    This will take ~2-3 seconds to load the model..."
+echo "4/5 Starting CV Pipeline Server V2 (loading models)..."
+echo "    Using extensible model manager architecture"
+echo "    This will take ~2-3 seconds to load SAM2..."
 source /home/aryan/anaconda3/bin/activate howyouseeme
-python3 /home/aryan/Documents/GitHub/HowYouSeeMe/ros2_ws/src/cv_pipeline/python/sam2_server.py &
+python3 /home/aryan/Documents/GitHub/HowYouSeeMe/ros2_ws/src/cv_pipeline/python/sam2_server_v2.py &
 SAM2_PID=$!
 echo "    PID: $SAM2_PID"
-echo "    Waiting for SAM2 model to load..."
+echo "    Waiting for models to load..."
 sleep 4
 
 # 4. Start RViz with comprehensive config
@@ -154,25 +162,41 @@ echo "  🎉 System Ready!"
 echo "=========================================="
 echo ""
 echo "Process IDs:"
-echo "  Kinect Bridge:  $KINECT_PID"
-echo "  RTABMap SLAM:   $RTABMAP_PID"
-echo "  SAM2 Server:    $SAM2_PID"
-echo "  RViz2:          $RVIZ_PID"
+echo "  Kinect Bridge:     $KINECT_PID"
+echo "  RTABMap SLAM:      $RTABMAP_PID"
+echo "  CV Pipeline V2:    $SAM2_PID"
+echo "  RViz2:             $RVIZ_PID"
 echo ""
 echo "RViz Displays:"
 echo "  📷 Camera Image - /kinect2/qhd/image_color"
-echo "  🎨 SAM2 Results - /cv_pipeline/visualization"
+echo "  🎨 CV Results   - /cv_pipeline/visualization"
 echo "  🗺️  SLAM Map     - /rtabmap/mapData"
 echo "  ☁️  Point Cloud  - /kinect2/qhd/points"
-echo "  🧭 TF Frames    - kinect2_link, map, odom"
+echo "  🧭 TF Frames    - kinect2_link (base), map, odom"
 echo ""
-echo "SAM2 Commands:"
-echo "  Send request:"
+echo "CV Pipeline Commands:"
+echo ""
+echo "  List models:"
+echo "    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \\"
+echo "      \"data: 'sam2:list_models=true'\""
+echo ""
+echo "  SAM2 point mode:"
 echo "    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \\"
 echo "      \"data: 'sam2:prompt_type=point'\""
 echo ""
-echo "  View results:"
-echo "    ros2 topic echo /cv_pipeline/results --once"
+echo "  SAM2 box mode:"
+echo "    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \\"
+echo "      \"data: 'sam2:prompt_type=box,box=200,150,700,450'\""
+echo ""
+echo "  SAM2 everything mode:"
+echo "    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \\"
+echo "      \"data: 'sam2:prompt_type=everything'\""
+echo ""
+echo "  Start streaming (10s @ 5fps):"
+echo "    ./start_sam2_stream.sh 10 5"
+echo ""
+echo "  View guide:"
+echo "    ./sam2_modes_guide.sh"
 echo ""
 echo "Move the Kinect to build a 3D map!"
 echo "Press Ctrl+C to stop all processes"

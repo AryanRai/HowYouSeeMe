@@ -178,6 +178,7 @@ class SAM2Server(Node):
         try:
             # Convert BGR to RGB and ensure contiguous array
             rgb_image = self.latest_rgb[:, :, ::-1].copy()
+            h, w = rgb_image.shape[:2]
             
             # Clear cache
             if self.device == "cuda":
@@ -187,21 +188,89 @@ class SAM2Server(Node):
             with torch.inference_mode(), torch.autocast(self.device, dtype=torch.bfloat16):
                 self.predictor.set_image(rgb_image)
                 
-                # Default: point at center
-                h, w = rgb_image.shape[:2]
-                point_coords = np.array([[w//2, h//2]])
-                point_labels = np.array([1])
+                # Parse prompt type and parameters
+                prompt_type = params.get("prompt_type", "point")
                 
-                masks, scores, logits = self.predictor.predict(
-                    point_coords=point_coords,
-                    point_labels=point_labels,
-                    multimask_output=True
-                )
+                if prompt_type == "point":
+                    # Point prompt (default: center)
+                    x = int(params.get("x", w//2))
+                    y = int(params.get("y", h//2))
+                    point_coords = np.array([[x, y]])
+                    point_labels = np.array([1])  # 1 = foreground
+                    
+                    masks, scores, logits = self.predictor.predict(
+                        point_coords=point_coords,
+                        point_labels=point_labels,
+                        multimask_output=True
+                    )
+                    prompt_data = {"point": [x, y]}
+                
+                elif prompt_type == "box":
+                    # Box prompt (format: x1,y1,x2,y2)
+                    box_str = params.get("box", f"0,0,{w},{h}")
+                    box = np.array([int(x) for x in box_str.split(",")])
+                    
+                    masks, scores, logits = self.predictor.predict(
+                        box=box,
+                        multimask_output=False
+                    )
+                    prompt_data = {"box": box.tolist()}
+                
+                elif prompt_type == "points":
+                    # Multiple points (format: x1,y1,x2,y2,...)
+                    points_str = params.get("points", f"{w//2},{h//2}")
+                    coords = [int(x) for x in points_str.split(",")]
+                    point_coords = np.array(coords).reshape(-1, 2)
+                    
+                    # Labels (1=foreground, 0=background)
+                    labels_str = params.get("labels", "1" * len(point_coords))
+                    point_labels = np.array([int(x) for x in labels_str.split(",")])
+                    
+                    masks, scores, logits = self.predictor.predict(
+                        point_coords=point_coords,
+                        point_labels=point_labels,
+                        multimask_output=True
+                    )
+                    prompt_data = {"points": point_coords.tolist(), "labels": point_labels.tolist()}
+                
+                elif prompt_type == "everything":
+                    # Segment everything in the image (automatic mask generation)
+                    # For simplicity, use a grid of points
+                    grid_size = int(params.get("grid_size", 32))
+                    points = []
+                    for i in range(grid_size):
+                        for j in range(grid_size):
+                            x = int((j + 0.5) * w / grid_size)
+                            y = int((i + 0.5) * h / grid_size)
+                            points.append([x, y])
+                    
+                    point_coords = np.array(points)
+                    point_labels = np.ones(len(points), dtype=np.int32)
+                    
+                    masks, scores, logits = self.predictor.predict(
+                        point_coords=point_coords,
+                        point_labels=point_labels,
+                        multimask_output=True
+                    )
+                    prompt_data = {"mode": "everything", "grid_size": grid_size}
+                
+                else:
+                    # Default to center point
+                    point_coords = np.array([[w//2, h//2]])
+                    point_labels = np.array([1])
+                    
+                    masks, scores, logits = self.predictor.predict(
+                        point_coords=point_coords,
+                        point_labels=point_labels,
+                        multimask_output=True
+                    )
+                    prompt_data = {"point": [w//2, h//2]}
             
             # Build result
             result = {
                 "model": "sam2",
                 "prompt_type": params.get("prompt_type", "point"),
+                "prompt_data": prompt_data,
                 "num_masks": len(masks),
                 "processing_time": time.time() - start_time,
                 "device": self.device,
@@ -224,7 +293,7 @@ class SAM2Server(Node):
             result["mask_stats"] = mask_stats
             
             # Create and publish visualization
-            self.publish_visualization(rgb_image, masks, scores, point_coords)
+            self.publish_visualization(rgb_image, masks, scores, prompt_data, params.get("prompt_type", "point"))
             
             return result
             
@@ -248,7 +317,7 @@ class SAM2Server(Node):
         
         return [int(x_min), int(y_min), int(x_max - x_min), int(y_max - y_min)]
     
-    def publish_visualization(self, rgb_image, masks, scores, point_coords):
+    def publish_visualization(self, rgb_image, masks, scores, prompt_data, prompt_type):
         """Create and publish visualization with masks overlaid"""
         try:
             # Convert RGB back to BGR for OpenCV
@@ -276,18 +345,30 @@ class SAM2Server(Node):
             )
             cv2.drawContours(vis_image, contours, -1, (0, 255, 0), 2)
             
-            # Draw the prompt point
-            if point_coords is not None and len(point_coords) > 0:
-                for point in point_coords:
-                    cv2.circle(vis_image, tuple(point.astype(int)), 8, (255, 0, 0), -1)
-                    cv2.circle(vis_image, tuple(point.astype(int)), 10, (255, 255, 255), 2)
+            # Draw prompts based on type
+            if prompt_type == "point" and "point" in prompt_data:
+                point = prompt_data["point"]
+                cv2.circle(vis_image, tuple(point), 8, (255, 0, 0), -1)
+                cv2.circle(vis_image, tuple(point), 10, (255, 255, 255), 2)
             
-            # Add text with score
-            text = f"SAM2 Score: {best_score:.3f}"
+            elif prompt_type == "box" and "box" in prompt_data:
+                box = prompt_data["box"]
+                cv2.rectangle(vis_image, (box[0], box[1]), (box[2], box[3]), (255, 0, 0), 2)
+            
+            elif prompt_type == "points" and "points" in prompt_data:
+                points = prompt_data["points"]
+                labels = prompt_data.get("labels", [1] * len(points))
+                for point, label in zip(points, labels):
+                    color = (255, 0, 0) if label == 1 else (0, 0, 255)  # Blue=fg, Red=bg
+                    cv2.circle(vis_image, tuple(point), 8, color, -1)
+                    cv2.circle(vis_image, tuple(point), 10, (255, 255, 255), 2)
+            
+            # Add text with score and mode
+            text = f"SAM2 [{prompt_type}] Score: {best_score:.3f}"
             cv2.putText(vis_image, text, (10, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
             cv2.putText(vis_image, text, (10, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 1)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 1)
             
             # Publish visualization
             viz_msg = self.bridge.cv2_to_imgmsg(vis_image, encoding='bgr8')
