@@ -12,6 +12,18 @@
 
 HowYouSeeMe is a **complete computer vision system** built on ROS2 Humble, providing real-time 3D perception, object detection, segmentation, face recognition, and emotion analysis. The system integrates multiple state-of-the-art AI models with Kinect v2 RGB-D sensing and RTABMap SLAM for comprehensive spatial understanding.
 
+### 🌍 Vision: World State Perception System
+
+HowYouSeeMe is the **perception foundation** for an intelligent robotics ecosystem that combines:
+- **Computer Vision Models**: YOLO, SAM, Segmentation, VLMs
+- **SLAM & Mapping**: RTABMap for 3D spatial understanding
+- **IMU Fusion**: BlueLily integration for enhanced localization
+- **World State Summarizer**: Unified interface combining all active models
+- **MCP Server**: Model Context Protocol for LLM integration
+- **Visual Memory System**: Persistent object tracking and spatial memory
+
+The goal is to create a **unified world state** that any LLM can query to understand the robot's environment, remember object locations, and make informed decisions based on real-time perception.
+
 ## ✨ Key Features
 
 ### 🤖 **5 AI Models - Unified Pipeline**
@@ -429,33 +441,60 @@ See [CV_PIPELINE_TROUBLESHOOTING.md](docs/CV_PIPELINE_TROUBLESHOOTING.md) for mo
 
 ## 🔮 Roadmap
 
-### Current Status ✅
+### ✅ Completed (Current Status)
 - [x] Kinect v2 ROS2 bridge with CUDA
 - [x] RTABMap SLAM integration
-- [x] SAM2 segmentation
+- [x] SAM2 segmentation (Meta SAM2)
 - [x] FastSAM with text prompts
 - [x] YOLO11 multi-task detection
 - [x] InsightFace face recognition
-- [x] Emotion detection (7 emotions)
+- [x] Emotion detection (7 emotions via FER)
 - [x] Interactive menu system
 - [x] Streaming support for all models
 - [x] RViz visualization
+- [x] BlueLily IMU integration code
+- [x] Coordinate frame fixes
 
-### In Progress 🚧
-- [ ] Depth Anything integration
-- [ ] DINO feature extraction
-- [ ] Multi-camera support
-- [ ] Advanced emotion tracking
-- [ ] Gesture recognition
+### 🚧 Short Term (In Progress)
+- [ ] **Fix SLAM and Kinect driver** - Stability improvements
+- [ ] **Test BlueLily integration** - IMU fusion validation
+- [ ] **IMU fusion with SLAM** - Better localization, lower drift
+- [ ] **Hand gesture detection** - MediaPipe or custom model
+- [ ] **MCP Server** - Model Context Protocol for LLM integration
+- [ ] **Depth + Segmentation fusion** - Combine depth with masks
+- [ ] **3D world position estimation** - Mark YOLO objects on SLAM map
+- [ ] **Gaze detection** - Eye tracking integration
+- [ ] **OCR tool** - Text detection and recognition
 
-### Planned 🔮
-- [ ] Hand tracking and gestures
-- [ ] OCR and text detection
-- [ ] Gaze estimation
-- [ ] Action recognition
-- [ ] Scene understanding
-- [ ] Web interface
-- [ ] Mobile app
+### 🎯 Medium Term
+- [ ] **World State Summarizer** - Unified interface combining all models
+- [ ] **Visual Memory System** - Remember object locations on SLAM map
+- [ ] **Event-based checkpointing** - Save frames when humans/objects detected
+- [ ] **Async processing** - Process past frames in background
+- [ ] **Object highlighting** - Highlight objects/rooms when discussing
+- [ ] **Meta SAM3** - Upgrade to latest segmentation model
+- [ ] **Depth Anything** - Advanced depth estimation
+- [ ] **DINO features** - Self-supervised feature extraction
+
+### 🔮 Long Term Vision
+- [ ] **Fix Kinect CUDA bridge** - Full GPU acceleration
+- [ ] **Extensible model pipeline** - Custom sequential model chains
+- [ ] **Condition-based pipelines** - Dynamic model activation
+- [ ] **Gaussian splatting** - 3D scene reconstruction
+- [ ] **NVBLOX integration** - Real-time 3D mapping
+- [ ] **LightGlue ONNX** - Feature matching
+- [ ] **Multi-camera support** - Sensor fusion
+- [ ] **Web interface** - Remote monitoring
+- [ ] **Mobile app** - Control and visualization
+
+### 🧠 Intelligent Features
+- [ ] **On-demand model loading** - Only run required models
+- [ ] **Always-on SLAM** - Continuous mapping
+- [ ] **Selective object detection** - Run YOLO when needed
+- [ ] **LLM-driven activation** - Models triggered by natural language
+- [ ] **Spatial memory queries** - "Where did I see the apple?"
+- [ ] **Object persistence** - Track objects across frames
+- [ ] **Scene understanding** - Semantic room mapping
 
 ## 🤝 Contributing
 
@@ -478,6 +517,31 @@ Contributions are welcome! Please:
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
+## 🏗️ System Integration
+
+### BlueLily IMU Integration
+HowYouSeeMe integrates with **BlueLily**, a high-performance flight computer and sensing platform:
+- **9-axis IMU** (MPU6500) for enhanced SLAM localization
+- **Real-time sensor fusion** with Kinect RGB-D data
+- **Reduced drift** in SLAM through IMU corrections
+- **ROS2 bridge** for seamless data integration
+
+See [BlueLily Integration Guide](docs/BlueLily_ROS2_Integration.md) for details.
+
+### Architecture Philosophy
+1. **On-Demand Processing**: Models load only when needed to conserve resources
+2. **Always-On SLAM**: Continuous mapping for spatial awareness
+3. **Selective Detection**: YOLO runs based on context and requirements
+4. **LLM Integration**: Natural language control via MCP server
+5. **Visual Memory**: Persistent object tracking on SLAM map
+6. **Event-Driven**: Checkpoint frames when significant events occur
+
+### Future Ecosystem
+- **DroidCore**: Central robotics platform
+- **Ally**: LLM-based cognitive system
+- **Comms**: Multi-protocol communication layer
+- **World State API**: Unified perception interface
+
 ## 🙏 Acknowledgments
 
 - **Meta AI** - SAM2 model
@@ -486,6 +550,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - **FER** - Emotion detection
 - **RTABMap** - SLAM implementation
 - **ROS2 Community** - Robotics framework
+- **NVIDIA** - CUDA acceleration and NVBLOX
 
 ## 📧 Contact
 
