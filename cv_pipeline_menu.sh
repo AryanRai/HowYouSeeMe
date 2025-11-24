@@ -85,8 +85,9 @@ show_main_menu() {
     echo "  2) ⚡ FastSAM - Faster SAM with Text Prompts"
     echo "  3) 🔍 YOLO11 - Detection, Pose, Segmentation, OBB"
     echo "  4) 👤 InsightFace - Face Recognition & Liveness"
-    echo "  5) 📊 [Future] Depth Anything"
-    echo "  6) 🧠 [Future] DINO Features"
+    echo "  5) 😊 Emotion Detection - 8 Emotions (HSEmotion)"
+    echo "  6) 📊 [Future] Depth Anything"
+    echo "  7) 🧠 [Future] DINO Features"
     echo ""
     echo -e "${CYAN}System Commands:${NC}"
     echo "  8) 📋 List Available Models"
@@ -806,6 +807,192 @@ send_sam2_request() {
 
 
 
+# Function to show Emotion Detection menu
+show_emotion_menu() {
+    while true; do
+        clear
+        print_header "  Emotion Detection - HSEmotion (8 Emotions)"
+        echo ""
+        echo -e "${MAGENTA}Select Mode:${NC}"
+        echo ""
+        echo "  1) 😊 Single Frame - Detect emotions once"
+        echo "  2) 🎬 Stream Emotions - Continuous detection"
+        echo "  3) 📊 Emotion Statistics - Track over time"
+        echo ""
+        echo -e "${CYAN}Emotions Detected:${NC}"
+        echo "  • Happy 😊      • Sad 😢        • Angry 😠"
+        echo "  • Surprise 😲   • Fear 😨       • Disgust 🤢"
+        echo "  • Neutral 😐    • Contempt 😒"
+        echo ""
+        echo "  0) ⬅️  Back to Main Menu"
+        echo ""
+        echo -n "Select option: "
+        
+        read choice
+        
+        case $choice in
+            1)
+                emotion_single_frame
+                ;;
+            2)
+                emotion_stream
+                ;;
+            3)
+                emotion_statistics
+                ;;
+            0)
+                return
+                ;;
+            *)
+                print_error "Invalid option"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# Emotion Detection: Single Frame
+emotion_single_frame() {
+    clear
+    print_header "  Emotion Detection - Single Frame"
+    echo ""
+    echo -e "${YELLOW}Detect emotions from all faces in current frame${NC}"
+    echo ""
+    
+    print_info "Detecting emotions..."
+    
+    REQUEST="insightface:mode=emotion"
+    
+    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+        "data: '$REQUEST'" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        print_success "Request sent successfully!"
+        echo ""
+        print_info "Emotions will be color-coded:"
+        echo "  • Happy: Green 😊"
+        echo "  • Sad: Red 😢"
+        echo "  • Angry: Blue 😠"
+        echo "  • Surprise: Yellow 😲"
+        echo "  • Fear: Purple 😨"
+        echo "  • Disgust: Cyan 🤢"
+        echo "  • Neutral: Gray 😐"
+        echo ""
+        print_info "Watch results in RViz: /cv_pipeline/visualization"
+        print_info "Check details: ros2 topic echo /cv_pipeline/results --once"
+    else
+        print_error "Failed to send request"
+    fi
+    
+    echo ""
+    echo "Press Enter to continue..."
+    read
+}
+
+# Emotion Detection: Stream
+emotion_stream() {
+    clear
+    print_header "  Emotion Detection - Stream"
+    echo ""
+    echo -e "${YELLOW}Continuous emotion detection${NC}"
+    echo ""
+    
+    echo -n "Duration in seconds (-1 for continuous, default 30): "
+    read duration
+    duration=${duration:-30}
+    
+    if [ "$duration" = "-1" ]; then
+        duration=999999
+        echo ""
+        print_warning "Starting CONTINUOUS streaming"
+        echo "Use option 9 to stop"
+    fi
+    
+    echo -n "FPS (1-30, default 5): "
+    read fps
+    fps=${fps:-5}
+    
+    echo ""
+    print_info "Starting emotion detection stream @ $fps FPS"
+    
+    REQUEST="insightface:mode=emotion,stream=true,duration=$duration,fps=$fps"
+    
+    echo ""
+    echo "Request: $REQUEST"
+    echo ""
+    
+    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+        "data: '$REQUEST'" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        print_success "Streaming started!"
+        echo ""
+        print_info "Watch results in RViz: /cv_pipeline/visualization"
+        print_info "Monitor: ros2 topic echo /cv_pipeline/results"
+        echo ""
+        if [ "$duration" = "999999" ]; then
+            print_warning "Streaming continuously - use option 9 to stop"
+        else
+            print_info "Streaming for $duration seconds"
+        fi
+        echo ""
+        print_info "Emotions update in real-time!"
+    else
+        print_error "Failed to start streaming"
+    fi
+    
+    echo ""
+    echo "Press Enter to continue..."
+    read
+}
+
+# Emotion Detection: Statistics
+emotion_statistics() {
+    clear
+    print_header "  Emotion Detection - Statistics"
+    echo ""
+    echo -e "${YELLOW}Track emotions over time and show statistics${NC}"
+    echo ""
+    
+    echo -n "Duration in seconds (default 60): "
+    read duration
+    duration=${duration:-60}
+    
+    echo -n "FPS (1-30, default 5): "
+    read fps
+    fps=${fps:-5}
+    
+    echo ""
+    print_info "Starting emotion tracking for $duration seconds @ $fps FPS"
+    echo ""
+    print_info "This will:"
+    echo "  • Detect emotions continuously"
+    echo "  • Track dominant emotions"
+    echo "  • Calculate emotion percentages"
+    echo "  • Show emotion transitions"
+    echo ""
+    
+    REQUEST="insightface:mode=emotion,stream=true,duration=$duration,fps=$fps"
+    
+    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+        "data: '$REQUEST'" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        print_success "Emotion tracking started!"
+        echo ""
+        print_info "Monitor results: ros2 topic echo /cv_pipeline/results"
+        echo ""
+        print_warning "Tip: Save results to analyze later:"
+        echo "  ros2 topic echo /cv_pipeline/results > emotion_log.txt"
+    else
+        print_error "Failed to start tracking"
+    fi
+    
+    echo ""
+    echo "Press Enter to continue..."
+    read
+}
+
 # Function to list models
 list_models() {
     clear
@@ -839,8 +1026,9 @@ show_insightface_menu() {
         echo "  2) 👤 Recognize Faces - Full recognition"
         echo "  3) ➕ Register New Person - Add to database"
         echo "  4) 🛡️  Check Liveness - Anti-spoofing"
-        echo "  5) 📊 Full Analysis - Everything"
-        echo "  6) 🎬 Stream Recognition - Continuous"
+        echo "  5) 😊 Detect Emotions - 7 emotions"
+        echo "  6) 📊 Full Analysis - Everything"
+        echo "  7) 🎬 Stream Recognition - Continuous"
         echo ""
         echo "  0) ⬅️  Back to Main Menu"
         echo ""
@@ -862,9 +1050,12 @@ show_insightface_menu() {
                 insightface_liveness
                 ;;
             5)
-                insightface_analyze
+                insightface_emotion
                 ;;
             6)
+                insightface_analyze
+                ;;
+            7)
                 insightface_stream
                 ;;
             0)
@@ -1046,6 +1237,52 @@ insightface_liveness() {
     read
 }
 
+# InsightFace: Detect Emotions
+insightface_emotion() {
+    clear
+    print_header "  InsightFace - Detect Emotions"
+    echo ""
+    echo -e "${YELLOW}Detect emotions from faces (7 emotions)${NC}"
+    echo ""
+    echo -e "${CYAN}Emotions detected:${NC}"
+    echo "  • Happy 😊"
+    echo "  • Sad 😢"
+    echo "  • Angry 😠"
+    echo "  • Surprise 😲"
+    echo "  • Fear 😨"
+    echo "  • Disgust 🤢"
+    echo "  • Neutral 😐"
+    echo ""
+    
+    print_info "Detecting emotions..."
+    
+    REQUEST="insightface:mode=emotion"
+    
+    ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+        "data: '$REQUEST'" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        print_success "Request sent successfully!"
+        echo ""
+        print_info "Emotions will be color-coded:"
+        echo "  • Happy: Green"
+        echo "  • Sad: Red"
+        echo "  • Angry: Blue"
+        echo "  • Surprise: Yellow"
+        echo "  • Fear: Purple"
+        echo "  • Disgust: Cyan"
+        echo "  • Neutral: Gray"
+        echo ""
+        print_info "Watch results in RViz: /cv_pipeline/visualization"
+    else
+        print_error "Failed to send request"
+    fi
+    
+    echo ""
+    echo "Press Enter to continue..."
+    read
+}
+
 # InsightFace: Full Analysis
 insightface_analyze() {
     clear
@@ -1200,7 +1437,10 @@ while true; do
         4)
             show_insightface_menu
             ;;
-        5|6)
+        5)
+            show_emotion_menu
+            ;;
+        6|7)
             clear
             print_warning "Model not yet implemented"
             echo ""

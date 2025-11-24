@@ -24,6 +24,10 @@ pip install insightface
 echo -e "${YELLOW}Installing ONNX Runtime GPU...${NC}"
 pip install onnxruntime-gpu
 
+# Install FER for emotion detection
+echo -e "${YELLOW}Installing FER (Facial Expression Recognition)...${NC}"
+pip install fer
+
 # Create face database directory
 echo -e "${YELLOW}Creating face database directory...${NC}"
 mkdir -p data/faces

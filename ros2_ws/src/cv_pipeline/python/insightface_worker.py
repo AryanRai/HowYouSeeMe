@@ -21,10 +21,19 @@ except ImportError:
     INSIGHTFACE_AVAILABLE = False
     print("Warning: InsightFace not installed. Install with: pip install insightface onnxruntime-gpu")
 
+try:
+    from hsemotion.facial_emotions import HSEmotionRecognizer
+    import torch
+    HSEMOTION_AVAILABLE = True
+except ImportError:
+    HSEMOTION_AVAILABLE = False
+    print("Info: HSEmotion not installed. For emotion detection, install with: pip install hsemotion")
+    print("Note: HSEmotion is a high-speed emotion detector with better accuracy than FER")
+
 
 class InsightFaceWorker:
     """
-    InsightFace worker for face detection, recognition, and liveness detection
+    InsightFace worker for face detection, recognition, liveness detection, and emotion recognition
     
     Modes:
     - detect: Face detection only (returns bboxes and landmarks)
@@ -32,7 +41,8 @@ class InsightFaceWorker:
     - detect_recognize: Full pipeline (detect + recognize)
     - register: Register new face to database
     - liveness: Liveness detection using depth
-    - analyze: Full analysis (detect + recognize + liveness + attributes)
+    - emotion: Emotion recognition (7 emotions)
+    - analyze: Full analysis (detect + recognize + liveness + attributes + emotion)
     """
     
     def __init__(self, device="cuda"):
@@ -43,6 +53,7 @@ class InsightFaceWorker:
         self.app = None
         self.detector = None
         self.recognizer = None
+        self.emotion_detector = None
         
         # Face database
         self.database_path = Path("data/faces")
@@ -76,6 +87,18 @@ class InsightFaceWorker:
         # Note: We use self.app for recognition since InsightFace requires detection module
         # The recognizer needs detection to work properly
         self.recognizer = self.app  # Use full app for recognition
+        
+        # Load emotion detector if available
+        if HSEMOTION_AVAILABLE:
+            try:
+                # HSEmotion supports multiple models: enet_b0_8_best_afew, enet_b0_8_best_vgaf, enet_b2_8
+                model_name = 'enet_b0_8_best_afew'  # Best for general use
+                device = 'cuda' if self.device == 'cuda' and torch.cuda.is_available() else 'cpu'
+                self.emotion_detector = HSEmotionRecognizer(model_name=model_name, device=device)
+                print(f"HSEmotion detector loaded successfully on {device}")
+            except Exception as e:
+                print(f"Failed to load HSEmotion detector: {e}")
+                self.emotion_detector = None
         
         print("InsightFace models loaded successfully")
     
@@ -312,6 +335,107 @@ class InsightFaceWorker:
             'processing_time': processing_time
         }
     
+    def detect_emotion(self, image: np.ndarray, params: Dict) -> Dict:
+        """
+        Mode: emotion
+        Detect emotions from faces in the image using HSEmotion
+        """
+        start_time = time.time()
+        
+        if not HSEMOTION_AVAILABLE or self.emotion_detector is None:
+            return {
+                'mode': 'emotion',
+                'error': 'Emotion detector not available. Install with: pip install hsemotion',
+                'processing_time': time.time() - start_time
+            }
+        
+        # Detect faces first
+        faces = self.detector.get(image)
+        
+        if len(faces) == 0:
+            return {
+                'mode': 'emotion',
+                'num_faces': 0,
+                'faces': [],
+                'processing_time': time.time() - start_time
+            }
+        
+        results = []
+        for face in faces:
+            bbox = face.bbox.astype(int)
+            x1, y1, x2, y2 = bbox
+            
+            # Ensure bbox is within image bounds
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(image.shape[1], x2)
+            y2 = min(image.shape[0], y2)
+            
+            # Crop face region
+            face_img = image[y1:y2, x1:x2]
+            
+            if face_img.size == 0 or face_img.shape[0] < 10 or face_img.shape[1] < 10:
+                continue
+            
+            # Detect emotion using HSEmotion
+            try:
+                # HSEmotion returns: emotion_name, confidence_scores
+                emotion, scores = self.emotion_detector.predict_emotions(face_img, logits=False)
+                
+                # HSEmotion emotions: Anger, Contempt, Disgust, Fear, Happiness, Neutral, Sadness, Surprise
+                emotion_map = {
+                    'Anger': 'angry',
+                    'Contempt': 'disgust',  # Map contempt to disgust
+                    'Disgust': 'disgust',
+                    'Fear': 'fear',
+                    'Happiness': 'happy',
+                    'Neutral': 'neutral',
+                    'Sadness': 'sad',
+                    'Surprise': 'surprise'
+                }
+                
+                # Get dominant emotion
+                dominant_emotion = emotion_map.get(emotion, emotion.lower())
+                
+                # Convert scores to dict
+                all_emotions = {}
+                emotion_labels = ['Anger', 'Contempt', 'Disgust', 'Fear', 'Happiness', 'Neutral', 'Sadness', 'Surprise']
+                for i, label in enumerate(emotion_labels):
+                    mapped_label = emotion_map.get(label, label.lower())
+                    if mapped_label in all_emotions:
+                        all_emotions[mapped_label] = max(all_emotions[mapped_label], float(scores[i]))
+                    else:
+                        all_emotions[mapped_label] = float(scores[i])
+                
+                confidence = all_emotions[dominant_emotion]
+                
+                results.append({
+                    'bbox': bbox.tolist(),
+                    'emotion': dominant_emotion,
+                    'confidence': float(confidence),
+                    'all_emotions': all_emotions
+                })
+                
+            except Exception as e:
+                print(f"Emotion detection error: {e}")
+                import traceback
+                traceback.print_exc()
+                results.append({
+                    'bbox': bbox.tolist(),
+                    'emotion': 'error',
+                    'confidence': 0.0,
+                    'error': str(e)
+                })
+        
+        processing_time = time.time() - start_time
+        
+        return {
+            'mode': 'emotion',
+            'num_faces': len(results),
+            'faces': results,
+            'processing_time': processing_time
+        }
+    
     def check_liveness(self, image: np.ndarray, depth_image: Optional[np.ndarray], params: Dict) -> Dict:
         """
         Mode: liveness
@@ -435,12 +559,17 @@ class InsightFaceWorker:
             return self.register_face(image, params)
         elif mode == 'liveness':
             return self.check_liveness(image, depth_image, params)
+        elif mode == 'emotion':
+            return self.detect_emotion(image, params)
         elif mode == 'analyze':
-            # Full analysis: detect + recognize + liveness
+            # Full analysis: detect + recognize + liveness + emotion
             result = self.detect_and_recognize(image, params)
             if depth_image is not None and result['num_faces'] > 0:
                 liveness = self.check_liveness(image, depth_image, params)
                 result['liveness'] = liveness
+            if HSEMOTION_AVAILABLE and result['num_faces'] > 0:
+                emotion = self.detect_emotion(image, params)
+                result['emotion'] = emotion
             return result
         else:
             return {'error': f'Unknown mode: {mode}'}
@@ -487,6 +616,23 @@ class InsightFaceWorker:
                 if 'gender' in face:
                     cv2.putText(vis_image, f"Gender: {face['gender']}", (x1, y_offset),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                    y_offset += 20
+                if 'emotion' in face:
+                    emotion_text = f"{face['emotion']}"
+                    if 'confidence' in face:
+                        emotion_text += f" ({face['confidence']:.2f})"
+                    # Color code emotions
+                    emotion_color = {
+                        'happy': (0, 255, 0),
+                        'sad': (255, 0, 0),
+                        'angry': (0, 0, 255),
+                        'surprise': (255, 255, 0),
+                        'fear': (128, 0, 128),
+                        'disgust': (0, 128, 128),
+                        'neutral': (128, 128, 128)
+                    }.get(face['emotion'], color)
+                    cv2.putText(vis_image, emotion_text, (x1, y_offset),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, emotion_color, 2)
         
         # Draw liveness result
         if 'liveness' in result:
@@ -503,8 +649,9 @@ class InsightFaceWorker:
         """Get model information"""
         return {
             'model': 'InsightFace',
-            'modes': ['detect', 'recognize', 'detect_recognize', 'register', 'liveness', 'analyze'],
+            'modes': ['detect', 'recognize', 'detect_recognize', 'register', 'liveness', 'emotion', 'analyze'],
             'database_size': len(self.face_database),
             'total_samples': sum(len(data['embeddings']) for data in self.face_database.values()),
-            'registered_people': list(self.metadata.keys())
+            'registered_people': list(self.metadata.keys()),
+            'emotion_available': HSEMOTION_AVAILABLE and self.emotion_detector is not None
         }

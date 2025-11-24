@@ -918,7 +918,7 @@ class InsightFaceModel(BaseModel):
     
     def get_supported_modes(self) -> List[str]:
         """Return supported InsightFace modes"""
-        return ["detect", "recognize", "detect_recognize", "register", "liveness", "analyze"]
+        return ["detect", "recognize", "detect_recognize", "register", "liveness", "emotion", "analyze"]
     
     def process(self, image: np.ndarray, params: Dict[str, Any], depth_image: Optional[np.ndarray] = None) -> Dict[str, Any]:
         """Process image with InsightFace"""

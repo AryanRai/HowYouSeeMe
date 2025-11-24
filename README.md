@@ -1,181 +1,504 @@
-# HowYouSeeMe - Production ROS2 Computer Vision System
+# HowYouSeeMe - Advanced ROS2 Computer Vision System
 
-> **A production-ready ROS2-based computer vision system for real-time perception using Microsoft Kinect v2, featuring RTABMap SLAM, YOLOv12 object detection, Nav2 navigation, and comprehensive robotics ecosystem integration.**
+> **A production-ready ROS2 computer vision system featuring Kinect v2, RTABMap SLAM, and 5 AI models for real-time perception, segmentation, detection, face recognition, and emotion analysis.**
 
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![ROS2](https://img.shields.io/badge/ROS2-Jazzy-blue)](https://docs.ros.org/en/jazzy/)
-[![Kinect](https://img.shields.io/badge/Kinect-v2-orange)](ROS2_SETUP_GUIDE.md)
-[![CUDA](https://img.shields.io/badge/CUDA-12.0+-green)](https://developer.nvidia.com/cuda-toolkit)
-[![Performance](https://img.shields.io/badge/Performance-14.5_FPS-red)](ROS2_SYSTEM_COMPLETE.md)
-[![Topics](https://img.shields.io/badge/ROS2_Topics-30+-purple)](IMPLEMENTATION_STATUS.md)
+[![ROS2](https://img.shields.io/badge/ROS2-Humble-blue)](https://docs.ros.org/en/humble/)
+[![Kinect](https://img.shields.io/badge/Kinect-v2-orange)](docs/Kinect2_ROS2_Bridge_Setup.md)
+[![CUDA](https://img.shields.io/badge/CUDA-12.6+-green)](https://developer.nvidia.com/cuda-toolkit)
+[![Models](https://img.shields.io/badge/AI_Models-5-purple)](docs/CV_PIPELINE_V2_GUIDE.md)
 
-## Overview
+## 🎯 Overview
 
-HowYouSeeMe is a **production-ready ROS2-based computer vision system** that provides real-time spatial awareness, advanced SLAM, and object recognition. Built entirely around **ROS2 Jazzy**, it leverages the complete robotics ecosystem including Nav2 navigation, RTABMap SLAM, and TF2 transforms while maintaining exceptional performance through CUDA acceleration and intelligent processing.
-
-
-### 🏗️ ROS2-Centric Architecture
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│ Kinect v2       │───▶│ kinect2_bridge   │───▶│ ROS2 Topics     │
-│ (CUDA Accel)    │    │ (14.5 FPS)       │    │ /kinect2/hd/*   │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-                                │                       │
-                                ▼                       ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│ RTABMap SLAM    │◀───│ HowYouSeeMe      │◀───│ YOLOv12         │
-│ (3D Mapping)    │    │ ROS2 Pipeline    │    │ Detection       │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│ Nav2 Navigation │    │ TF2 Transforms   │    │ RViz2           │
-│ (Path Planning) │    │ (Pose Tracking)  │    │ Visualization   │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
-
-### Core ROS2 Components
-
-1. **📡 High-Performance Sensor Bridge**
-   - **kinect2_bridge** with CUDA acceleration (14.5 FPS)
-   - **30+ ROS2 topics** published (HD, QHD, SD streams)
-   - **Real-time RGB-D** processing with intelligent frame management
-   - **TF2 transforms** for spatial coordinate management
-
-2. **🧠 Advanced Computer Vision Pipeline**
-   - **RTABMap SLAM** for production-grade 3D mapping and localization
-   - **YOLOv12 (YOLO11)** object detection with GPU acceleration
-   - **SAM2 (Segment Anything Model 2)** for real-time segmentation (optimized for 4GB GPUs)
-   - **Lazy-loaded AI models** triggered on-demand by LLM
-   - **Multi-object tracking** with Kalman filtering
-   - **ROS2 vision_msgs** for standardized detection publishing
-
-3. **🤖 Complete Robotics Integration**
-   - **Nav2 navigation stack** for autonomous path planning
-   - **RViz2 visualization** with custom configurations
-   - **Behavior trees** integration for complex autonomous behaviors
-   - **Standard ROS2 ecosystem** compatibility (sensor_msgs, geometry_msgs)
-
-
-
-### **ROS2 System Architecture**
-```
-┌─────────────────────────────────────────────────────────────┐
-│                 HowYouSeeMe ROS2 System                    │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
-│  │ kinect2     │  │ RTABMap     │  │ Nav2        │        │
-│  │ bridge      │─▶│ SLAM        │─▶│ Navigation  │        │
-│  │ (Sensor)    │  │ (Mapping)   │  │ (Planning)  │        │
-│  └─────────────┘  └─────────────┘  └─────────────┘        │
-│         │                 │                 │              │
-│         ▼                 ▼                 ▼              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
-│  │ YOLOv12     │  │ TF2         │  │ RViz2       │        │
-│  │ Detection   │  │ Transforms  │  │ Visualization│       │
-│  │ (Vision)    │  │ (Coords)    │  │ (Monitor)   │        │
-│  └─────────────┘  └─────────────┘  └─────────────┘        │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## 🤖 Robotics Ecosystem Integration
-
-HowYouSeeMe is designed as a **core perception module** for autonomous robotics:
-
-- **🗺️ SLAM & Mapping**: RTABMap provides production-grade 3D mapping and localization
-- **🎯 Navigation**: Nav2 stack enables autonomous path planning and obstacle avoidance
-- **👁️ Computer Vision**: YOLOv12 delivers state-of-the-art object detection and tracking
-- **🔗 ROS2 Ecosystem**: Full compatibility with standard robotics tools and frameworks
-
-## 🚀 Quick Start
-
-### Prerequisites
-- **OS**: Ubuntu 24.04 LTS
-- **ROS2**: Jazzy Jalopy
-- **Hardware**: Microsoft Kinect v2 with USB 3.0
-- **GPU**: NVIDIA with CUDA 12.0+ (recommended)
-- **RAM**: 8GB+ recommended
-
+HowYouSeeMe is a **complete computer vision system** built on ROS2 Humble, providing real-time 3D perception, object detection, segmentation, face recognition, and emotion analysis. The system integrates multiple state-of-the-art AI models with Kinect v2 RGB-D sensing and RTABMap SLAM for comprehensive spatial understanding.
 
 ## ✨ Key Features
 
-### 🔍 **Production-Ready Computer Vision**
-- **Kinect v2 Bridge**: Full-featured ROS2 bridge with multiple resolutions (SD/QHD/HD)
-  - 📖 [kinect2_ros2 Setup](docs/Kinect2_ROS2_Bridge_Setup.md) - Proper calibration, filtering, and point clouds
-- **RTABMap SLAM**: Production-grade 3D mapping and localization with loop closure
-  - 📖 [Quick Reference](docs/SLAM_QUICK_REFERENCE.md) | [Performance](docs/SLAM_Performance_Optimization.md)
-- **Modular CV Pipeline**: Lazy-loaded AI models for on-demand processing
-  - 📖 [CV Pipeline Guide](CV_PIPELINE_SAM2.md) - SAM2 segmentation optimized for 4GB GPUs
-  - **SAM2 Tiny**: 38.9M parameters, 0.28GB VRAM, ~0.7s per frame
-  - **Lazy Loading**: Models only load when requested by LLM
-  - **CUDA Accelerated**: Works on 4GB GPUs (RTX 3050)
-- **Real-Time Processing**: 14.5 FPS RGB-D with intelligent frame management
-- **GPU Acceleration**: CUDA-optimized processing pipeline
+### 🤖 **5 AI Models - Unified Pipeline**
+1. **SAM2 (Segment Anything Model 2)** - Real-time segmentation
+   - Point, box, and everything modes
+   - Streaming support up to 30 FPS
+   - Optimized for 4GB GPUs (0.28GB VRAM)
 
-### 🤖 **Complete ROS2 Integration**
-- **30+ ROS2 Topics**: Comprehensive sensor data and processing results
-- **Nav2 Navigation**: Autonomous path planning and obstacle avoidance
-- **TF2 Transforms**: Complete spatial coordinate management
-- **Standard Messages**: sensor_msgs, geometry_msgs, vision_msgs compatibility
-- **Launch System**: Flexible deployment configurations
+2. **FastSAM** - Fast segmentation with text prompts
+   - Natural language descriptions
+   - Multiple prompt types (point, box, text)
+   - Real-time performance
 
-### 🚀 **High-Performance Architecture**
-- **CUDA Acceleration**: 6x performance improvement with GPU processing
-- **Intelligent Processing**: Adaptive frame dropping with 1.1% drop rate
-- **Multi-Resolution**: HD, QHD, and SD streams for different use cases
-- **Resource Management**: Optimized memory and CPU utilization
-- **Real-Time Monitoring**: Comprehensive performance metrics and visualization
+3. **YOLO11** - Multi-task detection
+   - Object detection
+   - Instance segmentation
+   - Pose estimation
+   - Oriented bounding boxes (OBB)
 
-## 🏗️ Development Status
+4. **InsightFace** - Face recognition & liveness
+   - Face detection and recognition
+   - Face database management
+   - Liveness detection (anti-spoofing)
+   - Age and gender estimation
 
+5. **Emotion Detection (FER)** - 7 emotions
+   - Happy, Sad, Angry, Surprise, Fear, Disgust, Neutral
+   - Real-time streaming
+   - Multi-face support
+   - Color-coded visualization
 
+### 🎮 **Interactive Menu System**
+```bash
+./cv_menu.sh  # Launch interactive menu
+```
 
-### 🚧 In Development
-- [] **Foundation**: Kinect v2 integration and basic RGB-D processing
-- [] **Documentation**: Comprehensive project planning and architecture
-- [] **Ecosystem Design**: Integration strategy with DroidCore platform
-- [ ] **Computer Vision Pipeline**: SLAM + YOLO + Segmentation integration
-- [ ] **Memory System**: Redis-based RAG implementation
-- [ ] **MCP Server**: Model Context Protocol interface
-- [ ] **Ally Integration**: Tool calling and cognitive processing
+```
+CV Pipeline - Model Selection
+========================================
 
-### 🔮 Planned
-- [ ] **Advanced Features**: Multi-camera support and sensor fusion
-- [ ] **Performance Optimization**: Real-time 30fps processing
-- [ ] **Deployment Tools**: Containerization and scaling solutions
-- [ ] **Mobile Support**: Remote monitoring and control interfaces
+Select a Model:
 
+  1) 🎯 SAM2 - Segment Anything Model 2
+  2) ⚡ FastSAM - Faster SAM with Text Prompts
+  3) 🔍 YOLO11 - Detection, Pose, Segmentation, OBB
+  4) 👤 InsightFace - Face Recognition & Liveness
+  5) 😊 Emotion Detection - 7 Emotions (FER)
+  6) 📊 [Future] Depth Anything
+  7) 🧠 [Future] DINO Features
+
+System Commands:
+  8) 📋 List Available Models
+  9) 🛑 Stop Active Streaming
+```
+
+### 🗺️ **RTABMap SLAM Integration**
+- Real-time 3D mapping and localization
+- Loop closure detection
+- RGB-D odometry
+- Point cloud generation
+- TF2 coordinate transforms
+
+### 📡 **Kinect v2 Bridge**
+- 14.5 FPS RGB-D streaming
+- Multiple resolutions (HD, QHD, SD)
+- CUDA-accelerated processing
+- 30+ ROS2 topics
+- Calibrated depth and color alignment
+
+## 🏗️ System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    HowYouSeeMe System                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
+│  │ Kinect v2    │───▶│ kinect2      │───▶│ ROS2 Topics  │     │
+│  │ RGB-D Sensor │    │ bridge       │    │ 30+ streams  │     │
+│  └──────────────┘    └──────────────┘    └──────────────┘     │
+│                             │                     │            │
+│                             ▼                     ▼            │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
+│  │ RTABMap      │◀───│ CV Pipeline  │◀───│ AI Models    │     │
+│  │ SLAM         │    │ Server V2    │    │ (5 models)   │     │
+│  └──────────────┘    └──────────────┘    └──────────────┘     │
+│         │                    │                    │            │
+│         ▼                    ▼                    ▼            │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
+│  │ 3D Map       │    │ Visualization│    │ Results      │     │
+│  │ /rtabmap/... │    │ /cv_pipeline │    │ JSON + Image │     │
+│  └──────────────┘    └──────────────┘    └──────────────┘     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## � QuCick Start
+
+### Prerequisites
+```bash
+# System Requirements
+- Ubuntu 22.04 LTS
+- ROS2 Humble
+- NVIDIA GPU with CUDA 12.6+
+- Microsoft Kinect v2
+- 8GB+ RAM
+- Anaconda/Miniconda
+```
+
+### Installation
+
+1. **Clone Repository**
+```bash
+git clone https://github.com/AryanRai/HowYouSeeMe.git
+cd HowYouSeeMe
+```
+
+2. **Install Dependencies**
+```bash
+# Install Kinect v2 drivers
+./install_kinect_drivers.sh
+
+# Install ROS2 packages
+cd ros2_ws
+colcon build
+source install/setup.bash
+
+# Install AI models (in conda environment)
+conda activate howyouseeme
+./install_sam2.sh
+./install_fastsam.sh
+./install_yolo11.sh
+./install_insightface.sh
+```
+
+3. **Launch System**
+```bash
+# Full system (Kinect + SLAM + CV Pipeline + RViz)
+./launch_full_system_rviz.sh
+
+# Or just Kinect + CV Pipeline
+./launch_kinect_sam2_server.sh
+```
+
+4. **Use Interactive Menu**
+```bash
+./cv_menu.sh
+```
+
+## 📖 Documentation
+
+### Quick Start Guides
+- [Getting Started](docs/Getting_Started.md) - First-time setup
+- [Quick Start CV Pipeline](docs/QUICK_START_CV_PIPELINE.md) - CV system basics
+- [CV Pipeline V2 Guide](docs/CV_PIPELINE_V2_GUIDE.md) - Complete pipeline documentation
+
+### Hardware Setup
+- [Kinect v2 ROS2 Bridge](docs/Kinect2_ROS2_Bridge_Setup.md) - Sensor setup and calibration
+- [Kinect v2 ROS Humble](docs/KinectV2RosHumble.md) - ROS2 integration details
+
+### SLAM & Navigation
+- [SLAM Quick Reference](docs/SLAM_QUICK_REFERENCE.md) - RTABMap commands
+- [SLAM Integration](docs/Kinect_SLAM_Integration.md) - Full SLAM setup
+- [SLAM Performance](docs/SLAM_Performance_Optimization.md) - Optimization tips
+
+### AI Models
+- [SAM2 Integration](docs/SAM2_SUCCESS.md) - Segmentation model
+- [FastSAM Guide](docs/fastsam.md) - Fast segmentation
+- [YOLO11 Integration](docs/YOLO11_INTEGRATION.md) - Detection and pose
+- [InsightFace Complete](docs/INSIGHTFACE_COMPLETE_SUMMARY.md) - Face recognition
+- [Emotion Detection](docs/EMOTION_DETECTION_COMPLETE.md) - Emotion analysis
+
+### System Guides
+- [Menu Guide](docs/MENU_GUIDE.md) - Interactive menu usage
+- [Streaming Guide](docs/STREAMING_FIX.md) - Continuous streaming
+- [Troubleshooting](docs/CV_PIPELINE_TROUBLESHOOTING.md) - Common issues
+- [RViz Visualization](docs/RVIZ_VISUALIZATION_GUIDE.md) - Visualization setup
+
+## 🎯 Usage Examples
+
+### 1. SAM2 Segmentation
+```bash
+# Point mode - segment object at coordinates
+ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+    "data: 'sam2:prompt_type=point,x=480,y=270'"
+
+# Box mode - segment region
+ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+    "data: 'sam2:prompt_type=box,box=200,150,700,450'"
+
+# Everything mode - segment all objects
+ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+    "data: 'sam2:prompt_type=everything'"
+
+# Streaming mode
+ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+    "data: 'sam2:prompt_type=point,x=480,y=270,stream=true,duration=30,fps=5'"
+```
+
+### 2. YOLO11 Detection
+```bash
+# Object detection
+ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+    "data: 'yolo11:task=detect,conf=0.25'"
+
+# Pose estimation
+ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+    "data: 'yolo11:task=pose,conf=0.25'"
+
+# Instance segmentation
+ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+    "data: 'yolo11:task=segment,conf=0.25'"
+```
+
+### 3. Face Recognition
+```bash
+# Detect and recognize faces
+ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+    "data: 'insightface:mode=detect_recognize'"
+
+# Register new person
+ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+    "data: 'insightface:mode=register,name=John_Doe'"
+
+# Check liveness (anti-spoofing)
+ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+    "data: 'insightface:mode=liveness'"
+```
+
+### 4. Emotion Detection
+```bash
+# Single frame emotion detection
+ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+    "data: 'insightface:mode=emotion'"
+
+# Stream emotions continuously
+ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+    "data: 'insightface:mode=emotion,stream=true,duration=30,fps=5'"
+```
+
+### 5. FastSAM with Text
+```bash
+# Segment using text description
+ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+    "data: 'fastsam:prompt_type=text,text=a photo of a dog'"
+```
+
+## 🔧 System Commands
+
+### Launch Scripts
+```bash
+# Full system with visualization
+./launch_full_system_rviz.sh
+
+# Kinect + CV Pipeline only
+./launch_kinect_sam2_server.sh
+
+# SLAM with IMU
+./launch_kinect2_slam_with_imu.sh
+```
+
+### Utility Scripts
+```bash
+# Interactive menu
+./cv_menu.sh
+
+# Stop all processes
+./kill_all.sh
+
+# Stop streaming
+./stop_cv_streaming.sh
+
+# Test emotion detection
+./test_emotion_detection.sh
+```
+
+### Monitoring
+```bash
+# View results
+ros2 topic echo /cv_pipeline/results
+
+# Watch visualization
+# In RViz: Add Image display for /cv_pipeline/visualization
+
+# Monitor performance
+ros2 topic hz /cv_pipeline/results
+```
+
+## 📊 Performance
+
+### Processing Times
+- **SAM2 Tiny**: ~0.7s per frame (0.28GB VRAM)
+- **YOLO11**: ~0.1-0.3s per frame
+- **InsightFace**: ~0.3-0.5s per frame
+- **Emotion Detection**: ~0.5s per frame
+- **FastSAM**: ~0.2-0.4s per frame
+
+### Streaming Performance
+- **Recommended FPS**: 2-5 for AI models
+- **Kinect FPS**: 14.5 (RGB-D)
+- **SLAM Update Rate**: 1 Hz
+- **GPU Memory**: 0.28-2GB depending on model
+
+### System Resources
+- **RAM Usage**: 4-8GB
+- **GPU Memory**: 2-4GB (with all models loaded)
+- **CPU Usage**: 30-50% (4 cores)
+
+## 🛠️ Development
+
+### Project Structure
+```
+HowYouSeeMe/
+├── ros2_ws/                    # ROS2 workspace
+│   └── src/
+│       ├── cv_pipeline/        # CV Pipeline package
+│       │   └── python/         # AI model workers
+│       ├── kinect2_ros2_cuda/  # Kinect bridge
+│       └── bluelily_bridge/    # IMU integration
+├── docs/                       # Documentation
+├── BlueLily/                   # IMU firmware
+├── scripts/                    # Utility scripts
+├── launch_*.sh                 # Launch scripts
+├── cv_menu.sh                  # Interactive menu
+└── README.md                   # This file
+```
+
+### Adding New Models
+See [ADD_NEW_MODEL_GUIDE.md](ros2_ws/src/cv_pipeline/python/ADD_NEW_MODEL_GUIDE.md) for instructions on integrating new AI models.
+
+### Key Components
+- **cv_model_manager.py**: Model loading and management
+- **sam2_server_v2.py**: Main CV pipeline server
+- **sam2_worker.py**: SAM2 model worker
+- **yolo11_worker.py**: YOLO11 model worker
+- **insightface_worker.py**: Face recognition and emotion detection
+- **fastsam_worker.py**: FastSAM model worker
+
+## 🎓 Features in Detail
+
+### Streaming Support
+All models support continuous streaming:
+- **Duration**: Set in seconds or -1 for continuous
+- **FPS**: Configurable 1-30 FPS
+- **Stop Command**: Instant stop without restart
+- **Model Switching**: Switch between models during streaming
+
+### Visualization
+- **RViz Integration**: Real-time visualization
+- **Color-Coded Results**: Different colors for different detections
+- **Bounding Boxes**: Object and face detection
+- **Segmentation Masks**: Transparent overlays
+- **Emotion Colors**: Color-coded emotions
+- **Pose Keypoints**: Human skeleton visualization
+
+### Face Database
+- **Persistent Storage**: Face embeddings saved to disk
+- **Multiple Samples**: Register multiple images per person
+- **Metadata Tracking**: Names, timestamps, encounter counts
+- **Similarity Threshold**: Configurable recognition threshold
+
+### SLAM Features
+- **3D Mapping**: Real-time point cloud generation
+- **Loop Closure**: Automatic map correction
+- **Odometry**: Visual-inertial odometry
+- **Localization**: 6-DOF pose estimation
+- **Map Saving**: Persistent map storage
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**Server not starting?**
+```bash
+# Check if processes are running
+ps aux | grep sam2_server
+
+# Kill existing processes
+./kill_all.sh
+
+# Restart
+./launch_kinect_sam2_server.sh
+```
+
+**Models not loading?**
+```bash
+# Activate conda environment
+conda activate howyouseeme
+
+# Reinstall models
+./install_sam2.sh
+./install_insightface.sh
+```
+
+**Kinect not detected?**
+```bash
+# Check USB connection
+lsusb | grep Xbox
+
+# Restart udev rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+**CUDA errors?**
+```bash
+# Check CUDA installation
+nvidia-smi
+
+# Verify CUDA version
+nvcc --version
+```
+
+See [CV_PIPELINE_TROUBLESHOOTING.md](docs/CV_PIPELINE_TROUBLESHOOTING.md) for more solutions.
+
+## 🔮 Roadmap
+
+### Current Status ✅
+- [x] Kinect v2 ROS2 bridge with CUDA
+- [x] RTABMap SLAM integration
+- [x] SAM2 segmentation
+- [x] FastSAM with text prompts
+- [x] YOLO11 multi-task detection
+- [x] InsightFace face recognition
+- [x] Emotion detection (7 emotions)
+- [x] Interactive menu system
+- [x] Streaming support for all models
+- [x] RViz visualization
+
+### In Progress 🚧
+- [ ] Depth Anything integration
+- [ ] DINO feature extraction
+- [ ] Multi-camera support
+- [ ] Advanced emotion tracking
+- [ ] Gesture recognition
+
+### Planned 🔮
+- [ ] Hand tracking and gestures
+- [ ] OCR and text detection
+- [ ] Gaze estimation
+- [ ] Action recognition
+- [ ] Scene understanding
+- [ ] Web interface
+- [ ] Mobile app
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our development plan and:
+Contributions are welcome! Please:
 
-1. **Fork** the repository
-2. **Create** a feature branch for your component
-3. **Follow** the architecture outlined in the implementation plan
-4. **Test** your changes thoroughly
-5. **Submit** a pull request with clear documentation
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests and documentation
+5. Submit a pull request
 
 ### Development Guidelines
-- **Python**: Follow PEP 8 with type hints
-- **Documentation**: Update relevant docs for any changes
-- **Testing**: Include unit tests for new functionality
-- **Integration**: Ensure compatibility with ecosystem components
+- Follow PEP 8 for Python code
+- Add docstrings to all functions
+- Update documentation for new features
+- Test with real Kinect hardware
+- Ensure ROS2 compatibility
 
 ## 📄 License
 
-[MIT License](LICENSE) - see LICENSE file for details.
+MIT License - see [LICENSE](LICENSE) file for details.
 
-## 🆘 Support
+## 🙏 Acknowledgments
 
-- **📧 Email**: [buzzaryanrai@gmail.com](mailto:aryanrai170@gmail.com)
-- **🐛 Issues**: [GitHub Issues](https://github.com/AryanRai/HowYouSeeMe/issues)
-- **📖 Documentation**: [docs/](docs/) folder for comprehensive guides
-- **💬 Discussions**: Join the DroidCore ecosystem discussions
+- **Meta AI** - SAM2 model
+- **Ultralytics** - YOLO11 and FastSAM
+- **InsightFace** - Face recognition models
+- **FER** - Emotion detection
+- **RTABMap** - SLAM implementation
+- **ROS2 Community** - Robotics framework
+
+## 📧 Contact
+
+- **Email**: buzzaryanrai@gmail.com
+- **GitHub**: [@AryanRai](https://github.com/AryanRai)
+- **Issues**: [GitHub Issues](https://github.com/AryanRai/HowYouSeeMe/issues)
+
+## 🌟 Star History
+
+If you find this project useful, please consider giving it a star! ⭐
 
 ---
 
-**Built with ❤️ for the future of AI-powered robotics and world understanding.**
+**Built with ❤️ for advanced computer vision and robotics**
+
+*Last Updated: November 2024*
