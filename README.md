@@ -12,6 +12,9 @@
 
 HowYouSeeMe is a **complete computer vision system** built on ROS2 Humble, providing real-time 3D perception, object detection, segmentation, face recognition, and emotion analysis. The system integrates multiple state-of-the-art AI models with Kinect v2 RGB-D sensing and RTABMap SLAM for comprehensive spatial understanding.
 
+<img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/78f43bb2-b5f5-4dd2-9194-f15a24b39bbd" />
+
+
 ### 🌍 Vision: World State Perception System
 
 HowYouSeeMe is the **perception foundation** for an intelligent robotics ecosystem that combines:
