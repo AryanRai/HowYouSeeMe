@@ -197,12 +197,12 @@ classDiagram
 
 ```mermaid
 flowchart TB
-    subgraph Hardware["🔌 Hardware Layer"]
-        KINECT[("Kinect v2\nRGB-D Sensor")]
-        IMU[("BlueLily\n9-axis IMU")]
+    subgraph Hardware["Hardware Layer"]
+        KINECT[("Kinect v2<br/>RGB-D Sensor")]
+        IMU[("BlueLily<br/>9-axis IMU")]
     end
     
-    subgraph ROS2["🤖 ROS2 Nodes"]
+    subgraph ROS2["ROS2 Nodes"]
         subgraph Drivers["Driver Nodes"]
             KB[kinect2_bridge_node]
             BB[bluelily_imu_node]
@@ -224,21 +224,19 @@ flowchart TB
         end
     end
     
-    subgraph Topics["📡 ROS2 Topics"]
-        direction LR
-        RGB[/kinect2/hd/image_color]
-        DEPTH[/kinect2/hd/image_depth_rect]
-        POINTS[/kinect2/hd/points]
-        IMUD[/bluelily/imu/data]
-        REQ[/cv_pipeline/model_request]
-        RES[/cv_pipeline/results]
-        VIS[/cv_pipeline/visualization]
-        MAP[/rtabmap/map]
-        ODOMTOPIC[/rtabmap/odom]
+    subgraph Topics["ROS2 Topics"]
+        RGB["kinect2/hd/image_color"]
+        DEPTH["kinect2/hd/image_depth_rect"]
+        POINTS["kinect2/hd/points"]
+        IMUD["bluelily/imu/data"]
+        REQ["cv_pipeline/model_request"]
+        RES["cv_pipeline/results"]
+        VIS["cv_pipeline/visualization"]
+        MAP["rtabmap/map"]
+        ODOMTOPIC["rtabmap/odom"]
     end
     
-    subgraph TF["🔄 TF2 Frames"]
-        direction LR
+    subgraph TF["TF2 Frames"]
         WORLD[world]
         BASE[base_link]
         CAMERA[kinect2_link]
