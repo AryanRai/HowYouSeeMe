@@ -98,29 +98,267 @@ System Commands:
 
 ## 🏗️ System Architecture
 
+### UML Class Diagram
+
+```mermaid
+classDiagram
+    class BaseModel {
+        <<abstract>>
+        +device: str
+        +model: Any
+        +loaded: bool
+        +model_name: str
+        +load() bool
+        +process(image, params) Dict
+        +get_supported_modes() List
+        +visualize(image, result, params) ndarray
+        +unload()
+    }
+    
+    class SAM2Model {
+        +predictor: SAM2ImagePredictor
+        +load() bool
+        +process(image, params) Dict
+        +get_supported_modes() List
+        +visualize(image, result, params) ndarray
+        -_process_point(params, w, h) Tuple
+        -_process_box(params, w, h) Tuple
+        -_process_points(params, w, h) Tuple
+        -_process_everything(params, w, h) Tuple
+    }
+    
+    class FastSAMModel {
+        +model: FastSAM
+        +load() bool
+        +process(image, params) Dict
+        +get_supported_modes() List
+        +visualize(image, result, params) ndarray
+    }
+    
+    class YOLO11Model {
+        +models: Dict
+        +load() bool
+        +process(image, params) Dict
+        +get_supported_modes() List
+        +visualize(image, result, params) ndarray
+        -_process_detection(results) Dict
+        -_process_segmentation(results) Dict
+        -_process_pose(results) Dict
+        -_process_obb(results) Dict
+    }
+    
+    class InsightFaceModel {
+        +app: FaceAnalysis
+        +face_db: Dict
+        +load() bool
+        +process(image, params) Dict
+        +get_supported_modes() List
+        +visualize(image, result, params) ndarray
+        -_detect_recognize(image) Dict
+        -_register_face(image, name) Dict
+        -_detect_emotion(image) Dict
+        -_check_liveness(image) Dict
+    }
+    
+    class CVModelManager {
+        +models: Dict~str, BaseModel~
+        +active_model: str
+        +device: str
+        +load_model(model_name) bool
+        +process_request(model_name, image, params) Dict
+        +get_available_models() List
+        +unload_all()
+    }
+    
+    class SAM2ServerV2 {
+        +node: Node
+        +model_manager: CVModelManager
+        +image_sub: Subscription
+        +request_sub: Subscription
+        +result_pub: Publisher
+        +vis_pub: Publisher
+        +streaming: bool
+        +process_request(msg)
+        +image_callback(msg)
+        +start_streaming(params)
+        +stop_streaming()
+    }
+    
+    BaseModel <|-- SAM2Model
+    BaseModel <|-- FastSAMModel
+    BaseModel <|-- YOLO11Model
+    BaseModel <|-- InsightFaceModel
+    
+    CVModelManager "1" *-- "many" BaseModel : manages
+    SAM2ServerV2 "1" *-- "1" CVModelManager : uses
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    HowYouSeeMe System                           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
-│  │ Kinect v2    │───▶│ kinect2      │───▶│ ROS2 Topics  │     │
-│  │ RGB-D Sensor │    │ bridge       │    │ 30+ streams  │     │
-│  └──────────────┘    └──────────────┘    └──────────────┘     │
-│                             │                     │            │
-│                             ▼                     ▼            │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
-│  │ RTABMap      │◀───│ CV Pipeline  │◀───│ AI Models    │     │
-│  │ SLAM         │    │ Server V2    │    │ (5 models)   │     │
-│  └──────────────┘    └──────────────┘    └──────────────┘     │
-│         │                    │                    │            │
-│         ▼                    ▼                    ▼            │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
-│  │ 3D Map       │    │ Visualization│    │ Results      │     │
-│  │ /rtabmap/... │    │ /cv_pipeline │    │ JSON + Image │     │
-│  └──────────────┘    └──────────────┘    └──────────────┘     │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+
+### ROS2 Node Graph
+
+```mermaid
+flowchart TB
+    subgraph Hardware["🔌 Hardware Layer"]
+        KINECT[("Kinect v2\nRGB-D Sensor")]
+        IMU[("BlueLily\n9-axis IMU")]
+    end
+    
+    subgraph ROS2["🤖 ROS2 Nodes"]
+        subgraph Drivers["Driver Nodes"]
+            KB[kinect2_bridge_node]
+            BB[bluelily_imu_node]
+        end
+        
+        subgraph SLAM["SLAM Nodes"]
+            RTAB[rtabmap_node]
+            ODOM[rgbd_odometry_node]
+        end
+        
+        subgraph CV["CV Pipeline"]
+            CVS[sam2_server_v2]
+            subgraph Workers["Model Workers"]
+                SAM2W[SAM2Worker]
+                FASTW[FastSAMWorker]
+                YOLOW[YOLO11Worker]
+                INSW[InsightFaceWorker]
+            end
+        end
+    end
+    
+    subgraph Topics["📡 ROS2 Topics"]
+        direction LR
+        RGB[/kinect2/hd/image_color]
+        DEPTH[/kinect2/hd/image_depth_rect]
+        POINTS[/kinect2/hd/points]
+        IMUD[/bluelily/imu/data]
+        REQ[/cv_pipeline/model_request]
+        RES[/cv_pipeline/results]
+        VIS[/cv_pipeline/visualization]
+        MAP[/rtabmap/map]
+        ODOMTOPIC[/rtabmap/odom]
+    end
+    
+    subgraph TF["🔄 TF2 Frames"]
+        direction LR
+        WORLD[world]
+        BASE[base_link]
+        CAMERA[kinect2_link]
+        OPTICAL[kinect2_rgb_optical_frame]
+    end
+    
+    KINECT --> KB
+    IMU --> BB
+    
+    KB --> RGB
+    KB --> DEPTH
+    KB --> POINTS
+    BB --> IMUD
+    
+    RGB --> CVS
+    RGB --> RTAB
+    DEPTH --> RTAB
+    DEPTH --> ODOM
+    IMUD --> RTAB
+    
+    REQ --> CVS
+    CVS --> RES
+    CVS --> VIS
+    
+    CVS --> SAM2W
+    CVS --> FASTW
+    CVS --> YOLOW
+    CVS --> INSW
+    
+    ODOM --> ODOMTOPIC
+    RTAB --> MAP
+    
+    WORLD --> BASE
+    BASE --> CAMERA
+    CAMERA --> OPTICAL
+```
+
+### Data Flow Diagram
+
+```mermaid
+flowchart LR
+    subgraph Input["📥 Input"]
+        K[Kinect v2]
+        B[BlueLily IMU]
+    end
+    
+    subgraph Processing["⚙️ Processing"]
+        direction TB
+        BRIDGE[kinect2_bridge]
+        CVPIPE[CV Pipeline Server]
+        RTAB[RTABMap SLAM]
+        
+        subgraph Models["AI Models"]
+            M1[SAM2]
+            M2[FastSAM]
+            M3[YOLO11]
+            M4[InsightFace]
+        end
+    end
+    
+    subgraph Output["📤 Output"]
+        VIZ[RViz Visualization]
+        JSON[JSON Results]
+        MAP[3D Map]
+        TF[TF Transforms]
+    end
+    
+    K -->|USB 3.0| BRIDGE
+    B -->|Serial| BRIDGE
+    
+    BRIDGE -->|RGB-D| CVPIPE
+    BRIDGE -->|RGB-D + IMU| RTAB
+    
+    CVPIPE --> M1
+    CVPIPE --> M2
+    CVPIPE --> M3
+    CVPIPE --> M4
+    
+    M1 --> JSON
+    M2 --> JSON
+    M3 --> JSON
+    M4 --> JSON
+    
+    CVPIPE --> VIZ
+    RTAB --> MAP
+    RTAB --> TF
+    MAP --> VIZ
+```
+
+### Package Structure
+
+```mermaid
+graph TB
+    subgraph WS["ros2_ws/src"]
+        subgraph K2["kinect2_ros2_cuda"]
+            KB2[kinect2_bridge]
+            KC[kinect2_calibration]
+            KR[kinect2_registration]
+        end
+        
+        subgraph CV["cv_pipeline"]
+            CVN[cv_pipeline_node.cpp]
+            CVM[cv_model_manager.py]
+            SVR[sam2_server_v2.py]
+            SW[sam2_worker.py]
+            IW[insightface_worker.py]
+        end
+        
+        subgraph BL["bluelily_bridge"]
+            BLN[bluelily_imu_node.cpp]
+        end
+        
+        subgraph SL["kinect2_slam"]
+            SLC[SLAM Config]
+        end
+    end
+    
+    K2 --> CV
+    BL --> SL
+    CV --> SL
 ```
 
 ## � QuCick Start
