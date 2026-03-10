@@ -99,11 +99,10 @@ if [ "$BLUELILY_ENABLED" = true ]; then
     fi
     
     # Publish static TF between kinect2_link and bluelily_imu
-    # IMU is inside the robot head, approximately at the same position as Kinect
-    # Adjust these values based on your actual robot head geometry
-    echo "    Publishing static TF: kinect2_link -> bluelily_imu"
+    # IMU is 10cm behind the Kinect camera (negative X direction)
+    echo "    Publishing static TF: kinect2_link -> bluelily_imu (10cm behind)"
     ros2 run tf2_ros static_transform_publisher \
-        0 0 0 0 0 0 kinect2_link bluelily_imu &
+        -0.1 0 0 0 0 0 kinect2_link bluelily_imu &
     TF_PUB_PID=$!
     echo "    TF Publisher PID: $TF_PUB_PID"
     sleep 1
