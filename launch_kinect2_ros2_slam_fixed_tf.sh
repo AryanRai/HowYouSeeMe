@@ -1,6 +1,15 @@
 #!/bin/bash
 # Launch Kinect v2 with RTABMap SLAM using kinect2_ros2 bridge
 # WITH CORRECTED COORDINATE FRAME ORIENTATION
+#
+# SLAM Precision Improvements (v2):
+#   - Finer ICP voxels (2.5 cm) for sub-centimetre registration
+#   - Tighter ICP correspondence distance (8 cm)
+#   - More ICP iterations (50) and tighter convergence (1e-4)
+#   - Robust pose-graph optimizer
+#   - RGBD neighbor-link ICP refinement
+#   - Larger STM window (50 nodes) for wider loop-closure search
+#   - Stricter loop-closure threshold (0.11) + OptimizeMaxError guard
 
 # Set library path for libfreenect2
 export LD_LIBRARY_PATH=/home/aryan/Documents/GitHub/HowYouSeeMe/libfreenect2/freenect2/lib:$LD_LIBRARY_PATH
@@ -42,29 +51,36 @@ echo ""
 # The bridge publishes kinect2_link -> kinect2_rgb_optical_frame
 # We'll use kinect2_link as the base frame for SLAM
 # RTAB-Map will handle the orientation internally
-echo "3. Starting RTABMap SLAM with ICP odometry..."
+echo "3. Starting RTABMap SLAM with ICP odometry (precision mode)..."
 ros2 launch rtabmap_launch rtabmap.launch.py \
     rtabmap_args:="--delete_db_on_start \
                    --Mem/IncrementalMemory true \
                    --Mem/InitWMWithAllNodes false \
+                   --Mem/STMSize 50 \
+                   --Mem/BadSignaturesIgnored true \
                    --Rtabmap/DetectionRate 1 \
                    --RGBD/ProximityBySpace true \
                    --RGBD/ProximityMaxGraphDepth 50 \
                    --RGBD/ProximityPathMaxNeighbors 3 \
-                   --RGBD/AngularUpdate 0.05 \
-                   --RGBD/LinearUpdate 0.05 \
-                   --RGBD/OptimizeFromGraphEnd false \
-                   --Mem/STMSize 30 \
-                   --Mem/BadSignaturesIgnored true \
+                   --RGBD/AngularUpdate 0.03 \
+                   --RGBD/LinearUpdate 0.03 \
+                   --RGBD/OptimizeFromGraphEnd true \
+                   --RGBD/OptimizeMaxError 1.0 \
+                   --RGBD/NeighborLinkRefining true \
+                   --Optimizer/Robust true \
+                   --Optimizer/Iterations 20 \
+                   --Vis/MaxFeatures 1000 \
+                   --Vis/MinInliers 25 \
+                   --Vis/InlierDistance 0.05 \
                    --Rtabmap/TimeThr 0 \
                    --Rtabmap/MemoryThr 0 \
-                   --Rtabmap/LoopThr 0.15 \
-                   --Rtabmap/LoopRatio 0.9 \
+                   --Rtabmap/LoopThr 0.11 \
+                   --Rtabmap/LoopRatio 0.95 \
                    --Grid/MaxObstacleHeight 2.0 \
                    --Grid/MaxGroundHeight 0.0 \
-                   --Grid/CellSize 0.05 \
+                   --Grid/CellSize 0.025 \
                    --Grid/RangeMax 4.0 \
-                   --Grid/ClusterRadius 0.1 \
+                   --Grid/ClusterRadius 0.05 \
                    --Grid/GroundIsObstacle false" \
     rgb_topic:=/kinect2/qhd/image_color_rect \
     depth_topic:=/kinect2/qhd/image_depth_rect \
@@ -77,25 +93,25 @@ ros2 launch rtabmap_launch rtabmap.launch.py \
                 --Odom/ResetCountdown 1 \
                 --Odom/FilteringStrategy 1 \
                 --Odom/ParticleSize 400 \
-                --OdomF2M/ScanSubtractRadius 0.05 \
-                --OdomF2M/ScanMaxSize 15000 \
+                --Odom/GuessMotion true \
+                --Odom/Holonomic false \
+                --Odom/ScanKeyFrameThr 0.7 \
+                --OdomF2M/ScanSubtractRadius 0.025 \
+                --OdomF2M/ScanSubtractAngle 45 \
+                --OdomF2M/ScanMaxSize 20000 \
+                --OdomF2M/ScanRange 4.0 \
                 --OdomF2M/MaxSize 2000 \
                 --Icp/PointToPlane true \
-                --Icp/Iterations 30 \
-                --Icp/VoxelSize 0.05 \
-                --Icp/Epsilon 0.001 \
-                --Icp/PointToPlaneK 20 \
-                --Icp/PointToPlaneRadius 0.5 \
-                --Icp/MaxTranslation 0.3 \
-                --Icp/MaxCorrespondenceDistance 0.15 \
+                --Icp/Iterations 50 \
+                --Icp/VoxelSize 0.025 \
+                --Icp/Epsilon 0.0001 \
+                --Icp/PointToPlaneK 30 \
+                --Icp/PointToPlaneRadius 0.3 \
+                --Icp/MaxTranslation 0.2 \
+                --Icp/MaxCorrespondenceDistance 0.08 \
                 --Icp/PM false \
-                --Icp/PMOutlierRatio 0.85 \
-                --Icp/CorrespondenceRatio 0.2 \
-                --Odom/ScanKeyFrameThr 0.7 \
-                --OdomF2M/ScanSubtractAngle 45 \
-                --OdomF2M/ScanRange 4.0 \
-                --Odom/GuessMotion true \
-                --Odom/Holonomic false" &
+                --Icp/PMOutlierRatio 0.65 \
+                --Icp/CorrespondenceRatio 0.35" &
 RTABMAP_PID=$!
 
 echo "   PID: $RTABMAP_PID"
