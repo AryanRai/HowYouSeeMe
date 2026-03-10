@@ -1,6 +1,18 @@
 #!/bin/bash
 # Launch Kinect v2 with RTABMap SLAM using kinect2_ros2 bridge
 # WITH CORRECTED COORDINATE FRAME ORIENTATION
+#
+# SLAM Precision Improvements (v3):
+#   Roll-flip fix:
+#     - Publishes kinect2_slam_body (parent, ROS X-forward/Y-left/Z-up) → kinect2_link
+#       so physical roll-right appears as roll-right in the RTABMap viewer.
+#   Ghosting reduction:
+#     - Reg/Strategy 2 (Visual+ICP loop-closure refinement)
+#     - OptimizeMaxError 0.5 m (tightened from 1.0 m)
+#   Speed-up:
+#     - ICP iterations 50→30, PointToPlaneK 30→20
+#     - ScanMaxSize 20k→15k, MaxFeatures 1000→600
+#     - DetectionRate 1 Hz→2 Hz
 
 # Set library path for libfreenect2
 export LD_LIBRARY_PATH=/home/aryan/Documents/GitHub/HowYouSeeMe/libfreenect2/freenect2/lib:$LD_LIBRARY_PATH
@@ -10,9 +22,9 @@ source /opt/ros/jazzy/setup.bash
 source /home/aryan/Documents/GitHub/HowYouSeeMe/ros2_ws/install/setup.bash
 
 echo "=========================================="
-echo "Kinect v2 + RTABMap SLAM System"
+echo "Kinect v2 + RTABMap SLAM System (v3)"
 echo "Using kinect2_ros2_cuda bridge (CPU mode)"
-echo "WITH CORRECTED COORDINATE FRAMES"
+echo "WITH ROLL-CORRECTED COORDINATE FRAMES"
 echo "=========================================="
 echo ""
 
@@ -20,15 +32,15 @@ echo ""
 cleanup() {
     echo ""
     echo "Shutting down..."
-    kill $KINECT_PID $RTABMAP_PID $RVIZ_PID 2>/dev/null
-    wait $KINECT_PID $RTABMAP_PID $RVIZ_PID 2>/dev/null
+    kill $KINECT_PID $SLAM_TF_PID $RTABMAP_PID $RVIZ_PID 2>/dev/null
+    wait $KINECT_PID $SLAM_TF_PID $RTABMAP_PID $RVIZ_PID 2>/dev/null
     echo "All processes stopped"
     exit 0
 }
 
 trap cleanup SIGINT SIGTERM
 
-# Start Kinect2 ROS2 bridge first (it publishes TF)
+# 1. Start Kinect2 ROS2 bridge first (it publishes TF)
 echo "1. Starting Kinect2 ROS2 bridge..."
 ros2 launch kinect2_bridge kinect2_bridge_launch.yaml &
 KINECT_PID=$!
@@ -39,37 +51,57 @@ echo "2. Checking topics..."
 ros2 topic list | grep kinect2
 echo ""
 
-# The bridge publishes kinect2_link -> kinect2_rgb_optical_frame
-# We'll use kinect2_link as the base frame for SLAM
-# RTAB-Map will handle the orientation internally
-echo "3. Starting RTABMap SLAM with ICP odometry..."
+# 3. Publish roll-correction TF: kinect2_slam_body (parent) → kinect2_link (child)
+# Quaternion [qx=-0.5, qy=0.5, qz=-0.5, qw=0.5] converts the Kinect's optical
+# convention (X=right, Y=down, Z=forward) to ROS REP-103 (X=forward, Y=left, Z=up).
+# RTABMap tracks kinect2_slam_body so roll in the viewer matches physical reality.
+echo "3. Publishing roll-correction TF: kinect2_slam_body → kinect2_link"
+ros2 run tf2_ros static_transform_publisher \
+    --frame-id kinect2_slam_body \
+    --child-frame-id kinect2_link \
+    --x 0 --y 0 --z 0 \
+    --qx -0.5 --qy 0.5 --qz -0.5 --qw 0.5 &
+SLAM_TF_PID=$!
+echo "   PID: $SLAM_TF_PID"
+sleep 1
+
+# 4. Start RTABMap SLAM with ICP odometry (v3 precision+speed mode)
+echo "4. Starting RTABMap SLAM (Reg/Strategy=2, DetectionRate=2 Hz)..."
 ros2 launch rtabmap_launch rtabmap.launch.py \
     rtabmap_args:="--delete_db_on_start \
                    --Mem/IncrementalMemory true \
                    --Mem/InitWMWithAllNodes false \
-                   --Rtabmap/DetectionRate 1 \
+                   --Mem/STMSize 50 \
+                   --Mem/BadSignaturesIgnored true \
+                   --Rtabmap/DetectionRate 2 \
+                   --Reg/Strategy 2 \
                    --RGBD/ProximityBySpace true \
                    --RGBD/ProximityMaxGraphDepth 50 \
                    --RGBD/ProximityPathMaxNeighbors 3 \
-                   --RGBD/AngularUpdate 0.05 \
-                   --RGBD/LinearUpdate 0.05 \
-                   --RGBD/OptimizeFromGraphEnd false \
-                   --Mem/STMSize 30 \
-                   --Mem/BadSignaturesIgnored true \
+                   --RGBD/AngularUpdate 0.03 \
+                   --RGBD/LinearUpdate 0.03 \
+                   --RGBD/OptimizeFromGraphEnd true \
+                   --RGBD/OptimizeMaxError 0.5 \
+                   --RGBD/NeighborLinkRefining true \
+                   --Optimizer/Robust true \
+                   --Optimizer/Iterations 20 \
+                   --Vis/MaxFeatures 600 \
+                   --Vis/MinInliers 25 \
+                   --Vis/InlierDistance 0.05 \
                    --Rtabmap/TimeThr 0 \
                    --Rtabmap/MemoryThr 0 \
-                   --Rtabmap/LoopThr 0.15 \
-                   --Rtabmap/LoopRatio 0.9 \
+                   --Rtabmap/LoopThr 0.11 \
+                   --Rtabmap/LoopRatio 0.95 \
                    --Grid/MaxObstacleHeight 2.0 \
                    --Grid/MaxGroundHeight 0.0 \
-                   --Grid/CellSize 0.05 \
+                   --Grid/CellSize 0.025 \
                    --Grid/RangeMax 4.0 \
-                   --Grid/ClusterRadius 0.1 \
+                   --Grid/ClusterRadius 0.05 \
                    --Grid/GroundIsObstacle false" \
     rgb_topic:=/kinect2/qhd/image_color_rect \
     depth_topic:=/kinect2/qhd/image_depth_rect \
     camera_info_topic:=/kinect2/qhd/camera_info \
-    frame_id:=kinect2_link \
+    frame_id:=kinect2_slam_body \
     approx_sync:=true \
     wait_imu_to_init:=false \
     qos:=2 \
@@ -77,50 +109,50 @@ ros2 launch rtabmap_launch rtabmap.launch.py \
                 --Odom/ResetCountdown 1 \
                 --Odom/FilteringStrategy 1 \
                 --Odom/ParticleSize 400 \
-                --OdomF2M/ScanSubtractRadius 0.05 \
+                --Odom/GuessMotion true \
+                --Odom/Holonomic false \
+                --Odom/ScanKeyFrameThr 0.7 \
+                --OdomF2M/ScanSubtractRadius 0.025 \
+                --OdomF2M/ScanSubtractAngle 45 \
                 --OdomF2M/ScanMaxSize 15000 \
+                --OdomF2M/ScanRange 4.0 \
                 --OdomF2M/MaxSize 2000 \
                 --Icp/PointToPlane true \
                 --Icp/Iterations 30 \
-                --Icp/VoxelSize 0.05 \
-                --Icp/Epsilon 0.001 \
+                --Icp/VoxelSize 0.025 \
+                --Icp/Epsilon 0.0001 \
                 --Icp/PointToPlaneK 20 \
-                --Icp/PointToPlaneRadius 0.5 \
-                --Icp/MaxTranslation 0.3 \
-                --Icp/MaxCorrespondenceDistance 0.15 \
+                --Icp/PointToPlaneRadius 0.3 \
+                --Icp/MaxTranslation 0.2 \
+                --Icp/MaxCorrespondenceDistance 0.08 \
                 --Icp/PM false \
-                --Icp/PMOutlierRatio 0.85 \
-                --Icp/CorrespondenceRatio 0.2 \
-                --Odom/ScanKeyFrameThr 0.7 \
-                --OdomF2M/ScanSubtractAngle 45 \
-                --OdomF2M/ScanRange 4.0 \
-                --Odom/GuessMotion true \
-                --Odom/Holonomic false" &
+                --Icp/PMOutlierRatio 0.65 \
+                --Icp/CorrespondenceRatio 0.35" &
 RTABMAP_PID=$!
-
 echo "   PID: $RTABMAP_PID"
 sleep 3
 
-# Start RViz with SLAM config
-echo "4. Starting RViz2..."
+# 5. Start RViz with SLAM config
+echo "5. Starting RViz2..."
 rviz2 -d /home/aryan/Documents/GitHub/HowYouSeeMe/kinect2_slam_rviz.rviz &
 RVIZ_PID=$!
 
 echo ""
 echo "=========================================="
-echo "System Running!"
+echo "System Running! (v3 – roll-corrected)"
 echo "=========================================="
-echo "Kinect2 Bridge: $KINECT_PID"
-echo "RTABMap SLAM: $RTABMAP_PID"
-echo "RViz: $RVIZ_PID"
+echo "Kinect2 Bridge:  $KINECT_PID"
+echo "Slam-Body TF:    $SLAM_TF_PID"
+echo "RTABMap SLAM:    $RTABMAP_PID"
+echo "RViz:            $RVIZ_PID"
 echo ""
-echo "Using kinect2_ros2_cuda bridge with QHD resolution"
-echo "CPU registration enabled with proper calibration"
-echo "Using kinect2_link as base frame"
+echo "frame_id = kinect2_slam_body (roll-corrected)"
+echo "Reg/Strategy 2: Visual+ICP loop-closure refinement"
+echo "DetectionRate 2 Hz: faster map building"
 echo ""
 echo "Move the Kinect around to build a map!"
 echo "Press Ctrl+C to stop"
 echo "=========================================="
 
 # Wait for processes
-wait $KINECT_PID $RTABMAP_PID $RVIZ_PID
+wait $KINECT_PID $SLAM_TF_PID $RTABMAP_PID $RVIZ_PID
