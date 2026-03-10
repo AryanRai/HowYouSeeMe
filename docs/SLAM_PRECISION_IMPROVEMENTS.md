@@ -129,13 +129,92 @@ at `~/.ros/rtabmap.db` and will be loaded automatically on the next run.
 
 ---
 
-## Files Changed
+## v3 Changes — Roll Fix, Ghosting Reduction, Speed-Up
+
+### Problem (v3 session)
+
+1. **Roll direction inverted in RTABMap viewer**: tilting the Kinect to the right
+   appeared as tilting to the left in the 3-D window.  Root cause: the Kinect
+   bridge publishes `kinect2_link` in optical convention (X=right, Y=down,
+   Z=forward).  RTABMap's OpenGL viewer converts this to display space by
+   negating Y (to get Y-up), which also negates roll (rotation around the
+   forward/Z axis).
+
+2. **Ghosting persisted in RViz**: loop closures were being detected by visual
+   features alone, whose positional accuracy is limited.  Adding ICP refinement
+   on top of each visual closure produces sub-centimetre-accurate relative
+   transforms that eliminate residual ghost layers.
+
+3. **SLAM map built slowly**: 50 ICP iterations per odometry frame at 20 000-
+   point clouds limited the frame rate, and loop closures were only checked at
+   1 Hz.
+
+### Fix 1 — Roll-Correction TF (`kinect2_slam_body`)
+
+A static TF is now published from `kinect2_slam_body` (**parent**, follows
+ROS REP-103: X=forward, Y=left, Z=up) to `kinect2_link` (**child**, optical
+convention from bridge).
+
+```
+TF tree (v3):
+  map → odom → kinect2_slam_body (RTABMap publishes)
+                    → kinect2_link (our static TF, qx=-0.5 qy=0.5 qz=-0.5 qw=0.5)
+                          → kinect2_rgb_optical_frame (bridge)
+                          → bluelily_imu (IMU static TF)
+```
+
+RTABMap's `frame_id` is now `kinect2_slam_body`.  All existing child chains
+(kinect2_link → optical frame, kinect2_link → bluelily_imu) remain valid via
+the common-ancestor TF2 lookup.
+
+**Quaternion derivation** (parent `kinect2_slam_body` → child `kinect2_link`):
+
+| kinect2_link direction | expressed in kinect2_slam_body |
+|---|---|
+| X = right | −Y (right = −left) |
+| Y = down  | −Z (down  = −up)   |
+| Z = forward | +X (forward)     |
+
+Rotation matrix: `R = [[0,0,1],[−1,0,0],[0,−1,0]]`, det = +1, unit quaternion
+`[qx=−0.5, qy=0.5, qz=−0.5, qw=0.5]`.
+
+### Fix 2 — Visual+ICP Loop-Closure Registration (`Reg/Strategy 2`)
+
+| Parameter | Before | After | Effect |
+|---|---|---|---|
+| `--Reg/Strategy` | 0 (Visual only) | **2 (Visual+ICP)** | Visual features find the approximate loop-closure transform; ICP then refines it to centimetre precision, eliminating residual ghost layers |
+| `--RGBD/OptimizeMaxError` | 1.0 m | **0.5 m** | Stricter residual guard rejects poorly-converged ICP refinements |
+
+### Fix 3 — Speed-Up (faster map building, lower CPU load)
+
+| Parameter | v2 | v3 | Speedup |
+|---|---|---|---|
+| `--Rtabmap/DetectionRate` | 1 Hz | **2 Hz** | Loop closures checked twice as often → map builds faster |
+| `--Icp/Iterations` | 50 | **30** | ~40 % less ICP time per odometry frame |
+| `--Icp/PointToPlaneK` | 30 | **20** | Faster local-plane normal estimation |
+| `--OdomF2M/ScanMaxSize` | 20 000 pts | **15 000 pts** | Lighter reference map → faster F2M matching |
+| `--Vis/MaxFeatures` | 1 000 | **600** | Faster visual feature extraction per frame |
+
+Accuracy is maintained because the tighter ICP voxels (2.5 cm), smaller
+correspondence cap (8 cm), and NeighborLinkRefining are all kept from v2.
+
+### Expected Improvements (v3 cumulative)
+
+| Metric | Baseline | v2 | v3 |
+|---|---|---|---|
+| Roll display direction | inverted | inverted | **correct** |
+| Ghosting in RViz map | severe | reduced | **minimal** |
+| Odometry frame rate | ~5 Hz | ~6 Hz | **~10 Hz** |
+| Map building speed | slow | moderate | **fast** |
+| Loop-closure accuracy | visual only | visual only | **Visual+ICP** |
+
+---
+
+## Files Changed (v3)
 
 | File | Change |
 |---|---|
-| `launch_full_system_rviz.sh` | Shared `RTABMAP_PRECISION_ARGS` + `ODOM_PRECISION_ARGS` variables; denoiser step added |
-| `launch_kinect2_ros2_slam_fixed_tf.sh` | Same precision parameters applied |
-| `launch_kinect2_slam_with_imu.sh` | Same precision parameters applied |
-| `full_system_rviz.rviz` | Added filtered cloud display; tighter SLAM map voxel/decimation |
-| `pointcloud_denoiser.py` | New: real-time range + voxel + SOR filter node |
-| `docs/SLAM_PRECISION_IMPROVEMENTS.md` | This file |
+| `launch_full_system_rviz.sh` | kinect2_slam_body TF publisher; frame_id updated; Reg/Strategy 2; speed params |
+| `launch_kinect2_ros2_slam_fixed_tf.sh` | Same v3 changes |
+| `launch_kinect2_slam_with_imu.sh` | Same v3 changes |
+| `docs/SLAM_PRECISION_IMPROVEMENTS.md` | This v3 section |

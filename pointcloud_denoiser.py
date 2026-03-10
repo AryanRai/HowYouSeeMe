@@ -84,7 +84,7 @@ class PointCloudDenoiser(Node):
 
         # Check if scipy is available for SOR
         try:
-            from scipy.spatial import cKDTree  # noqa: F401
+            from scipy.spatial import cKDTree
             self._scipy_available = True
         except ImportError:
             self._scipy_available = False
@@ -225,9 +225,9 @@ class PointCloudDenoiser(Node):
             out_pts["y"] = xyz[:, 1]
             out_pts["z"] = xyz[:, 2]
             out_pts["rgb"] = rgb  # already float32 from structured array
-            return pc2.create_cloud(header, original.fields, out_pts.tolist())
+            return pc2.create_cloud(header, original.fields, out_pts)
         else:
-            return pc2.create_cloud_xyz32(header, xyz.tolist())
+            return pc2.create_cloud_xyz32(header, xyz)
 
 
 # ────────────────────────────────────────────────────────────────────────────
