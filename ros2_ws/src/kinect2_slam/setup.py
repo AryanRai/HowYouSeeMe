@@ -24,6 +24,7 @@ setup(
     entry_points={
         'console_scripts': [
             'tsdf_integrator = kinect2_slam.tsdf_integrator_node:main',
+            'rerun_logger = kinect2_slam.rerun_logger_node:main',
         ],
     },
 )

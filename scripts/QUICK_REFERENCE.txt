@@ -4,7 +4,8 @@
 
 LAUNCH SYSTEM
 -------------
-  ./scripts/run_complete_slam_system.sh
+  ./scripts/run_complete_slam_system.sh         # Full system
+  ./scripts/run_complete_slam_system.sh --rerun # Full system + Rerun recording
   
   Components started:
     1. Kinect v2 RGB-D
@@ -13,6 +14,7 @@ LAUNCH SYSTEM
     4. Semantic projection (3D object labels)
     5. CV Pipeline server
     6. RViz2 visualization
+    7. Rerun logger (with --rerun flag)
 
 STOP SYSTEM
 -----------
@@ -25,6 +27,21 @@ TEST & DIAGNOSE
   ./scripts/test_complete_system.sh      # Check all components
   ./scripts/diagnose_markers.sh          # Debug marker visibility
   ./scripts/debug_semantic.sh            # Debug semantic projection
+  ./scripts/check_frame_alignment.sh     # Check TF2 frame alignment
+
+RERUN REPLAY
+------------
+  rerun /tmp/howyouseeme_*.rrd           # Replay recorded session
+  
+  Rerun streams:
+    • camera/rgb          RGB feed (downsampled)
+    • camera/depth        Depth with color scale
+    • camera/detections   YOLO bounding boxes
+    • robot/pose          Camera transform
+    • robot/trajectory    Path trail
+    • map/tsdf            TSDF point cloud
+    • world/objects       Tracked objects (3D)
+    • world/markers       Semantic labels
 
 START CV DETECTION
 ------------------
@@ -93,6 +110,8 @@ LOGS
   /tmp/semantic.log               # Semantic projection
   /tmp/cv_pipeline.log            # CV Pipeline server
   /tmp/rviz.log                   # RViz2
+  /tmp/rerun.log                  # Rerun logger
+  /tmp/howyouseeme_*.rrd          # Rerun recordings
 
 TROUBLESHOOTING
 ---------------

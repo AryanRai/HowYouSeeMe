@@ -119,6 +119,12 @@ install(PROGRAMS
   RENAME tsdf_integrator
 )
 
+install(PROGRAMS
+  kinect2_slam/rerun_logger_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME rerun_logger
+)
+
 install(DIRECTORY
   launch
   DESTINATION share/${PROJECT_NAME}/
