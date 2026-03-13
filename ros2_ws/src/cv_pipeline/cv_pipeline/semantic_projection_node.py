@@ -73,6 +73,8 @@ class SemanticProjection(Node):
         self.declare_parameter('depth_trunc', 5.0)
         self.declare_parameter('merge_threshold', 0.5)
         self.declare_parameter('debug_projection', False)
+        self.declare_parameter('flip_x_axis', False)  # Set to True if Kinect X points left
+        self.declare_parameter('flip_y_axis', False)  # Set to True if Y-axis is flipped
 
         self.fx = self.get_parameter('fx').value
         self.fy = self.get_parameter('fy').value
@@ -152,14 +154,27 @@ class SemanticProjection(Node):
     def pixel_to_3d(self, u, v, depth_image):
         """Back-project pixel (u, v) to a 3-D point in the camera frame."""
         depth_trunc = self.get_parameter('depth_trunc').value
+        flip_x = self.get_parameter('flip_x_axis').value
+        flip_y = self.get_parameter('flip_y_axis').value
+        
         h, w = depth_image.shape
         if not (0 <= int(v) < h and 0 <= int(u) < w):
             return None
         Z = float(depth_image[int(v), int(u)]) / 1000.0   # mm → m
         if Z <= 0.0 or Z > depth_trunc:
             return None
+        
+        # Standard pinhole camera model
         X = (u - self.cx) * Z / self.fx
         Y = (v - self.cy) * Z / self.fy
+        
+        # Flip axes if Kinect frame has non-standard orientation
+        # This corrects for non-standard Kinect optical frame convention
+        if flip_x:
+            X = -X
+        if flip_y:
+            Y = -Y
+        
         return np.array([X, Y, Z])
 
     def camera_to_world(self, xyz_camera):
@@ -186,6 +201,8 @@ class SemanticProjection(Node):
             return self.pixel_to_3d(u, v, depth_image)
         
         depth_trunc = self.get_parameter('depth_trunc').value
+        flip_x = self.get_parameter('flip_x_axis').value
+        flip_y = self.get_parameter('flip_y_axis').value
         h, w = depth_image.shape
         
         # Sample depth values in a region around the bbox center
@@ -212,6 +229,12 @@ class SemanticProjection(Node):
         Z = float(np.median(valid_depths))
         X = (u - self.cx) * Z / self.fx
         Y = (v - self.cy) * Z / self.fy
+        
+        # Apply same axis flips as pixel_to_3d
+        if flip_x:
+            X = -X
+        if flip_y:
+            Y = -Y
         
         return np.array([X, Y, Z])
 
