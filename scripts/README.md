@@ -6,6 +6,7 @@ This directory contains all operational scripts for the HowYouSeeMe SLAM + CV Pi
 
 ### Launch & Control
 - **run_complete_slam_system.sh** - Launch the complete system (Kinect + ORB-SLAM3 + TSDF + Semantic + CV Pipeline + RViz)
+- **run_phase2_3.sh** - Launch just Kinect + ORB-SLAM3 + TSDF (used by complete system)
 - **kill_all_slam.sh** - Stop all SLAM-related processes
 - **cv_pipeline_menu.sh** - Interactive menu for CV model selection (YOLO, SAM2, InsightFace, etc.)
 

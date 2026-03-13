@@ -6,5 +6,13 @@
     "samples": 1,
     "last_updated": "2025-11-23 02:00:38",
     "last_seen": "2025-11-23 02:02:41"
+  },
+  "person_001": {
+    "name": "aryan",
+    "first_seen": "2026-03-14 04:14:42",
+    "encounter_count": 22,
+    "samples": 1,
+    "last_updated": "2026-03-14 04:14:42",
+    "last_seen": "2026-03-14 04:15:38"
   }
 }
