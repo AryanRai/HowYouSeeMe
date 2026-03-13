@@ -48,6 +48,12 @@ install(DIRECTORY
   USE_SOURCE_PERMISSIONS
 )
 
+install(PROGRAMS
+  cv_pipeline/semantic_projection_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME semantic_projection
+)
+
 install(DIRECTORY
   launch/
   DESTINATION share/${PROJECT_NAME}/launch

@@ -11,12 +11,12 @@ import json
 import time
 import numpy as np
 import message_filters
-import tf2_ros
 from cv_bridge import CvBridge
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import PointStamped
+from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import Marker, MarkerArray
+from scipy.spatial.transform import Rotation
 
 
 class SemanticProjection(Node):
@@ -39,10 +39,13 @@ class SemanticProjection(Node):
         self.cy = self.get_parameter('cy').value
         
         self.bridge = CvBridge()
-        self.tf_buffer = tf2_ros.Buffer()
-        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
         self.world_state = {}
         self.marker_id = 0
+        self.latest_pose = None
+        
+        # Subscribe to ORB-SLAM3 pose
+        self.pose_sub = self.create_subscription(
+            PoseStamped, '/orb_slam3/pose', self.pose_callback, 10)
         
         # Subscribers with time synchronization
         self.yolo_sub = message_filters.Subscriber(
@@ -67,6 +70,10 @@ class SemanticProjection(Node):
         self.get_logger().info(f'Camera intrinsics: fx={self.fx}, fy={self.fy}, cx={self.cx}, cy={self.cy}')
         self.get_logger().info(f'Confidence threshold: {self.get_parameter("conf_threshold").value}')
     
+    def pose_callback(self, msg):
+        """Store latest ORB-SLAM3 pose"""
+        self.latest_pose = msg
+    
     def pixel_to_3d(self, u, v, depth_image):
         """Back-project pixel to 3D camera coordinates"""
         depth_trunc = self.get_parameter('depth_trunc').value
@@ -90,22 +97,26 @@ class SemanticProjection(Node):
         return np.array([X, Y, Z])
     
     def camera_to_world(self, xyz_camera, stamp):
-        """Transform 3D point from camera frame to world frame using TF2"""
-        pt = PointStamped()
-        pt.header.stamp = stamp
-        pt.header.frame_id = 'kinect2_rgb_optical_frame'
-        pt.point.x, pt.point.y, pt.point.z = xyz_camera
-        
-        try:
-            pt_world = self.tf_buffer.transform(
-                pt, 'map',
-                timeout=rclpy.duration.Duration(seconds=0.1))
-            return np.array([pt_world.point.x,
-                           pt_world.point.y,
-                           pt_world.point.z])
-        except Exception as e:
-            self.get_logger().warn(f'TF2 error: {e}', throttle_duration_sec=5.0)
+        """Transform 3D point from camera frame to world frame using ORB-SLAM3 pose"""
+        if self.latest_pose is None:
+            self.get_logger().warn('No ORB-SLAM3 pose available yet', throttle_duration_sec=5.0)
             return None
+        
+        # Get camera pose in world frame (Twc = camera-to-world transform)
+        pose = self.latest_pose.pose
+        
+        # Extract rotation (quaternion to matrix)
+        from scipy.spatial.transform import Rotation
+        q = [pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
+        R = Rotation.from_quat(q).as_matrix()
+        
+        # Extract translation
+        t = np.array([pose.position.x, pose.position.y, pose.position.z])
+        
+        # Transform point: p_world = R * p_camera + t
+        xyz_world = R @ xyz_camera + t
+        
+        return xyz_world
     
     def detection_cb(self, yolo_msg, depth_msg):
         """Process YOLO detections and back-project to 3D"""
