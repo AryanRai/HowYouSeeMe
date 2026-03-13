@@ -24,7 +24,6 @@ from rclpy.node import Node
 import json
 import time
 import numpy as np
-import message_filters
 from cv_bridge import CvBridge
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
@@ -92,14 +91,16 @@ class SemanticProjection(Node):
         self.pose_sub = self.create_subscription(
             PoseStamped, '/orb_slam3/pose', self.pose_callback, 10)
 
-        # CV pipeline results + depth image (time-synchronised)
-        self.cv_sub = message_filters.Subscriber(
-            self, String, '/cv_pipeline/results')
-        self.depth_sub = message_filters.Subscriber(
-            self, Image, '/kinect2/hd/image_depth_rect')
-        self.sync = message_filters.ApproximateTimeSynchronizer(
-            [self.cv_sub, self.depth_sub], queue_size=10, slop=0.15)
-        self.sync.registerCallback(self.detection_cb)
+        # CV pipeline results (String messages don't have timestamps)
+        # Store latest depth image separately
+        self.latest_depth = None
+        self.depth_lock = threading.Lock()
+        
+        self.depth_sub = self.create_subscription(
+            Image, '/kinect2/hd/image_depth_rect', self.depth_callback, 10)
+        
+        self.cv_sub = self.create_subscription(
+            String, '/cv_pipeline/results', self.detection_cb, 10)
 
         # ── Publishers ────────────────────────────────────────────────────────
         self.marker_pub = self.create_publisher(
@@ -134,6 +135,15 @@ class SemanticProjection(Node):
         tf.transform.translation.z = msg.pose.position.z
         tf.transform.rotation = msg.pose.orientation
         self.tf_broadcaster.sendTransform(tf)
+
+    def depth_callback(self, msg: Image):
+        """Store latest depth image."""
+        try:
+            cv_depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding='16UC1')
+            with self.depth_lock:
+                self.latest_depth = cv_depth
+        except Exception as e:
+            self.get_logger().error(f'Depth callback error: {e}')
 
     # ── Geometry helpers ─────────────────────────────────────────────────────
 
@@ -233,15 +243,23 @@ class SemanticProjection(Node):
 
     # ── Unified detection callback ────────────────────────────────────────────
 
-    def detection_cb(self, cv_msg: String, depth_msg: Image):
+    def detection_cb(self, cv_msg: String):
         """
-        Receive CV pipeline results + depth frame.
+        Receive CV pipeline results.
         Dispatches to the appropriate parser based on the ``model`` or
         ``mode`` field inside the JSON payload.
         """
+        # Get latest depth image
+        with self.depth_lock:
+            depth = self.latest_depth
+        
+        if depth is None:
+            self.get_logger().warn('No depth image available yet', 
+                                  throttle_duration_sec=5.0)
+            return
+        
         try:
             data = json.loads(cv_msg.data)
-            depth = self.bridge.imgmsg_to_cv2(depth_msg, '16UC1')
         except Exception as e:
             self.get_logger().warn(f'Parse error: {e}')
             return

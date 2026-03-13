@@ -213,6 +213,19 @@ Launch complete system (Kinect + IMU + ORB-SLAM3 + TSDF):
 
 This single script launches all 4 components in one terminal.
 
+## TF2 Transforms
+
+The ORB-SLAM3 node broadcasts the camera pose as a TF2 transform:
+- Frame: `map` → `camera_pose` (or `camera_link`)
+- Published on every successful tracking frame
+- Used by semantic projection to transform detections to world coordinates
+
+Check TF2 frames:
+```bash
+ros2 run tf2_ros tf2_monitor --all-frames
+ros2 run tf2_ros tf2_echo map camera_pose
+```
+
 ## Common Runtime Issues
 
 ### Kinect not detected

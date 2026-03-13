@@ -47,7 +47,13 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: true
-      Marker Scale: 0.3
+        camera_link:
+          Value: true
+        camera_pose:
+          Value: true
+        map:
+          Value: true
+      Marker Scale: 0.5
       Name: TF
       Show Arrows: true
       Show Axes: true
@@ -108,7 +114,7 @@ Visualization Manager:
       Enabled: true
       Name: Semantic Labels
       Namespaces:
-        semantic: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile

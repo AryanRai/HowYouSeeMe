@@ -4,10 +4,12 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 #include <cv_bridge/cv_bridge.hpp>
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
+#include <tf2_ros/tf2_ros/transform_broadcaster.hpp>
 #include <opencv2/opencv.hpp>
 
 #include "System.h"
@@ -50,6 +52,9 @@ public:
         // Publisher
         pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(
             "/orb_slam3/pose", 10);
+        
+        // TF2 broadcaster for camera pose
+        tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
         
         RCLCPP_INFO(this->get_logger(), "ORB-SLAM3 RGB-D node initialized (no IMU)");
     }
@@ -105,6 +110,23 @@ private:
             pose_msg.pose.orientation.w = q.w();
             
             pose_pub_->publish(pose_msg);
+            
+            // Broadcast TF2 transform: map -> camera
+            geometry_msgs::msg::TransformStamped transform;
+            transform.header.stamp = rgb_msg->header.stamp;
+            transform.header.frame_id = "map";
+            transform.child_frame_id = "camera_pose";
+            
+            transform.transform.translation.x = t_world(0);
+            transform.transform.translation.y = t_world(1);
+            transform.transform.translation.z = t_world(2);
+            
+            transform.transform.rotation.x = q.x();
+            transform.transform.rotation.y = q.y();
+            transform.transform.rotation.z = q.z();
+            transform.transform.rotation.w = q.w();
+            
+            tf_broadcaster_->sendTransform(transform);
         }
     }
     
@@ -118,6 +140,7 @@ private:
     std::shared_ptr<message_filters::Synchronizer<SyncPolicy>> sync_;
     
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
+    std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 };
 
 int main(int argc, char** argv)
