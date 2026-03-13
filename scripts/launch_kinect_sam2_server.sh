@@ -19,7 +19,7 @@ export PYTHONPATH="$CONDA_PREFIX/lib/python3.12/site-packages:$PYTHONPATH"
 # Kill any existing processes
 echo "Cleaning up existing processes..."
 pkill -f kinect2_bridge_node 2>/dev/null
-pkill -f sam2_server.py 2>/dev/null
+pkill -f sam2_server_v2.py 2>/dev/null
 pkill -f rtabmap 2>/dev/null
 pkill -f cv_pipeline_node 2>/dev/null
 sleep 1

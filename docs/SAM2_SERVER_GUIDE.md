@@ -147,7 +147,7 @@ def segment_scene():
 
 ## Files
 
-- `ros2_ws/src/cv_pipeline/python/sam2_server.py` - SAM2 ROS2 server
+- `ros2_ws/src/cv_pipeline/python/sam2_server_v2.py` - SAM2 ROS2 server
 - `launch_kinect_sam2_server.sh` - Launch script
 - `SAM2_SERVER_GUIDE.md` - This guide
 
