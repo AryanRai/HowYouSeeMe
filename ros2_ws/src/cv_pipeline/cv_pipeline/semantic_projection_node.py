@@ -71,6 +71,8 @@ class SemanticProjection(Node):
         self.declare_parameter('marker_lifetime', 30.0)
         self.declare_parameter('conf_threshold', 0.4)
         self.declare_parameter('depth_trunc', 5.0)
+        self.declare_parameter('merge_threshold', 0.5)
+        self.declare_parameter('debug_projection', False)
 
         self.fx = self.get_parameter('fx').value
         self.fy = self.get_parameter('fy').value
@@ -174,6 +176,44 @@ class SemanticProjection(Node):
         R = Rotation.from_quat(q).as_matrix()
         t = np.array([pose.position.x, pose.position.y, pose.position.z])
         return R @ xyz_camera + t
+
+    def _get_bbox_3d_position(self, u, v, bbox, depth_image):
+        """
+        Get robust 3D position using median depth from bbox region.
+        Falls back to center point if bbox is None.
+        """
+        if bbox is None:
+            return self.pixel_to_3d(u, v, depth_image)
+        
+        depth_trunc = self.get_parameter('depth_trunc').value
+        h, w = depth_image.shape
+        
+        # Sample depth values in a region around the bbox center
+        # Use 25% of bbox size as sampling region
+        x1, y1, x2, y2 = bbox
+        sample_w = max(10, int((x2 - x1) * 0.25))
+        sample_h = max(10, int((y2 - y1) * 0.25))
+        
+        u_min = max(0, int(u - sample_w // 2))
+        u_max = min(w, int(u + sample_w // 2))
+        v_min = max(0, int(v - sample_h // 2))
+        v_max = min(h, int(v + sample_h // 2))
+        
+        # Extract depth patch and get valid depths
+        depth_patch = depth_image[v_min:v_max, u_min:u_max]
+        valid_depths = depth_patch[depth_patch > 0] / 1000.0  # mm → m
+        valid_depths = valid_depths[valid_depths < depth_trunc]
+        
+        if len(valid_depths) == 0:
+            # Fall back to center pixel
+            return self.pixel_to_3d(u, v, depth_image)
+        
+        # Use median depth for robustness against outliers
+        Z = float(np.median(valid_depths))
+        X = (u - self.cx) * Z / self.fx
+        Y = (v - self.cy) * Z / self.fy
+        
+        return np.array([X, Y, Z])
 
     def _broadcast_object_tf(self, frame_id: str, xyz_world, stamp):
         """Publish a TF2 frame for a detected object at ``xyz_world``."""
@@ -291,6 +331,7 @@ class SemanticProjection(Node):
         """Handle YOLO detect / segment / pose / obb results."""
         task = data.get('task', data.get('model', 'detect'))
         thresh = self.get_parameter('conf_threshold').value
+        debug = self.get_parameter('debug_projection').value
 
         for det in data.get('detections', []):
             conf = det.get('confidence', 0.0)
@@ -309,10 +350,18 @@ class SemanticProjection(Node):
                 bbox = det.get('bbox', [])
                 if len(bbox) < 4:
                     continue
+                # Use center of bounding box
                 u = (bbox[0] + bbox[2]) / 2.0
                 v = (bbox[1] + bbox[3]) / 2.0
+                
+                if debug:
+                    self.get_logger().info(
+                        f'Detection: {label} bbox=[{bbox[0]:.0f},{bbox[1]:.0f},{bbox[2]:.0f},{bbox[3]:.0f}] '
+                        f'center=({u:.0f},{v:.0f})',
+                        throttle_duration_sec=2.0)
 
-            xyz_cam = self.pixel_to_3d(u, v, depth)
+            # Get 3D position using median depth in bbox region for robustness
+            xyz_cam = self._get_bbox_3d_position(u, v, bbox if not obb else None, depth)
             if xyz_cam is None:
                 continue
             xyz_world = self.camera_to_world(xyz_cam)

@@ -18,5 +18,7 @@ ros2 run cv_pipeline semantic_projection --ros-args \
     -p world_state_path:=/tmp/world_state.json \
     -p marker_lifetime:=30.0 \
     -p conf_threshold:=0.4 \
-    -p depth_trunc:=5.0
+    -p depth_trunc:=5.0 \
+    -p merge_threshold:=0.3 \
+    -p debug_projection:=false
 

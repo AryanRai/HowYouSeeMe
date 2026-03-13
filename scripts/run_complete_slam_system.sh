@@ -94,7 +94,7 @@ ros2 run cv_pipeline semantic_projection --ros-args \
     -p marker_lifetime:=30.0 \
     -p conf_threshold:=0.4 \
     -p depth_trunc:=5.0 \
-    -p merge_threshold:=0.5 \
+    -p merge_threshold:=0.3 \
     -p debug_projection:=false > /tmp/semantic.log 2>&1 &
 SEMANTIC_PID=$!
 echo "      PID: $SEMANTIC_PID (logs: /tmp/semantic.log)"

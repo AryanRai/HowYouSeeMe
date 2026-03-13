@@ -96,14 +96,32 @@ private:
             
             // Convert SE3 to ROS Pose (invert to get camera pose in world frame)
             Sophus::SE3f Twc = Tcw.inverse();
-            Eigen::Matrix3f R = Twc.rotationMatrix();
-            Eigen::Vector3f t_world = Twc.translation();
+            Eigen::Matrix3f R_orb = Twc.rotationMatrix();
+            Eigen::Vector3f t_orb = Twc.translation();
             
-            pose_msg.pose.position.x = t_world(0);
-            pose_msg.pose.position.y = t_world(1);
-            pose_msg.pose.position.z = t_world(2);
+            // Transform from ORB-SLAM3 frame to ROS optical frame
+            // ORB-SLAM3: X-right, Y-down, Z-forward (OpenCV convention)
+            // ROS optical: X-right, Y-down, Z-forward (same!)
+            // But we need to publish in camera_link frame for RViz
+            // ROS camera_link: X-forward, Y-left, Z-up
+            // Transformation: [X_ros, Y_ros, Z_ros] = [Z_orb, -X_orb, -Y_orb]
             
-            Eigen::Quaternionf q(R);
+            Eigen::Matrix3f R_transform;
+            R_transform << 0, 0, 1,
+                          -1, 0, 0,
+                           0, -1, 0;
+            
+            Eigen::Matrix3f R_ros = R_transform * R_orb;
+            Eigen::Vector3f t_ros;
+            t_ros(0) = t_orb(2);   // X_ros = Z_orb (forward)
+            t_ros(1) = -t_orb(0);  // Y_ros = -X_orb (left)
+            t_ros(2) = -t_orb(1);  // Z_ros = -Y_orb (up)
+            
+            pose_msg.pose.position.x = t_ros(0);
+            pose_msg.pose.position.y = t_ros(1);
+            pose_msg.pose.position.z = t_ros(2);
+            
+            Eigen::Quaternionf q(R_ros);
             pose_msg.pose.orientation.x = q.x();
             pose_msg.pose.orientation.y = q.y();
             pose_msg.pose.orientation.z = q.z();
@@ -117,9 +135,9 @@ private:
             transform.header.frame_id = "map";
             transform.child_frame_id = "camera_pose";
             
-            transform.transform.translation.x = t_world(0);
-            transform.transform.translation.y = t_world(1);
-            transform.transform.translation.z = t_world(2);
+            transform.transform.translation.x = t_ros(0);
+            transform.transform.translation.y = t_ros(1);
+            transform.transform.translation.z = t_ros(2);
             
             transform.transform.rotation.x = q.x();
             transform.transform.rotation.y = q.y();
