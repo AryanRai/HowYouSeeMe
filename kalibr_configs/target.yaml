@@ -1,0 +1,5 @@
+target_type: 'checkerboard'
+targetCols: 8  # Number of internal corners (columns)
+targetRows: 6  # Number of internal corners (rows)
+rowSpacingMeters: 0.030  # MEASURE YOUR BOARD EXACTLY with calipers
+colSpacingMeters: 0.030  # MEASURE YOUR BOARD EXACTLY with calipers

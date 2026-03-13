@@ -1,0 +1,10 @@
+#Accelerometers
+accelerometer_noise_density: 0.01      # [m/s^2/sqrt(Hz)] (MPU6500 typical)
+accelerometer_random_walk: 0.001       # [m/s^3/sqrt(Hz)]
+
+#Gyroscopes  
+gyroscope_noise_density: 0.001         # [rad/s/sqrt(Hz)] (MPU6500 typical)
+gyroscope_random_walk: 0.0001          # [rad/s^2/sqrt(Hz)]
+
+rostopic: /imu/data
+update_rate: 100.0  # BlueLily firmware configured for 100Hz

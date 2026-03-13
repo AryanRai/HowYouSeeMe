@@ -1,0 +1,100 @@
+%YAML:1.0
+
+#--------------------------------------------------------------------------------------------
+# Camera Parameters for Kinect v2 RGB-D + BlueLily IMU
+# Replace intrinsics with values from Phase 1 Kalibr calibration
+#--------------------------------------------------------------------------------------------
+
+# Camera calibration and distortion parameters (OpenCV)
+Camera.type: "PinHole"
+
+# Intrinsics - Kinect v2 typical values (HD mode)
+# These are reasonable defaults for Kinect v2 1920x1080
+Camera.fx: 1081.37
+Camera.fy: 1081.37
+Camera.cx: 960.0
+Camera.cy: 540.0
+
+# Distortion parameters (set to 0 if using rectified images)
+Camera.k1: 0.0
+Camera.k2: 0.0
+Camera.p1: 0.0
+Camera.p2: 0.0
+
+Camera.width: 1920
+Camera.height: 1080
+
+# Camera frames per second
+Camera.fps: 14.5
+
+# Color order of the images (0: BGR, 1: RGB)
+Camera.RGB: 1
+
+# Stereo baseline times fx (not used for RGB-D, but ORB-SLAM3 expects it)
+Camera.bf: 40.0
+
+# Close/Far threshold. Baseline times.
+ThDepth: 40.0
+
+# Depth map factor (converts depth values to meters)
+# Kinect v2 depth is in millimeters, so 1000.0 converts to meters
+DepthMapFactor: 1000.0
+
+#--------------------------------------------------------------------------------------------
+# IMU Parameters (BlueLily MPU9250)
+#--------------------------------------------------------------------------------------------
+
+# IMU noise characteristics (from datasheet or empirical testing)
+IMU.NoiseGyro: 0.001      # rad/s
+IMU.NoiseAcc: 0.01        # m/s^2
+IMU.GyroWalk: 0.0001      # rad/s/sqrt(Hz)
+IMU.AccWalk: 0.001        # m/s^2/sqrt(Hz)
+
+# IMU frequency (Hz)
+IMU.Frequency: 800
+
+# Transformation from IMU to Camera
+# IMU is 10cm (0.1m) behind camera lens
+# 90° rotation around Z axis (IMU rotated left relative to camera)
+# Translation: -0.1m in camera Z (IMU is behind camera)
+Tbc: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: f
+   data: [0.0, -1.0, 0.0, 0.0,
+          1.0, 0.0, 0.0, 0.0,
+          0.0, 0.0, 1.0, -0.1,
+          0.0, 0.0, 0.0, 1.0]
+
+#--------------------------------------------------------------------------------------------
+# ORB Parameters
+#--------------------------------------------------------------------------------------------
+
+# ORB Extractor: Number of features per image
+ORBextractor.nFeatures: 1000
+
+# ORB Extractor: Scale factor between levels in the scale pyramid
+ORBextractor.scaleFactor: 1.2
+
+# ORB Extractor: Number of levels in the scale pyramid
+ORBextractor.nLevels: 8
+
+# ORB Extractor: Fast threshold
+# Image is divided in a grid. At each cell FAST are extracted imposing a minimum response.
+# Firstly we impose iniThFAST. If no corners are detected we impose a lower value minThFAST
+ORBextractor.iniThFAST: 20
+ORBextractor.minThFAST: 7
+
+#--------------------------------------------------------------------------------------------
+# Viewer Parameters
+#--------------------------------------------------------------------------------------------
+Viewer.KeyFrameSize: 0.05
+Viewer.KeyFrameLineWidth: 1.0
+Viewer.GraphLineWidth: 0.9
+Viewer.PointSize: 2.0
+Viewer.CameraSize: 0.08
+Viewer.CameraLineWidth: 3.0
+Viewer.ViewpointX: 0.0
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -1.8
+Viewer.ViewpointF: 500.0

@@ -32,6 +32,8 @@ This directory contains the core documentation for the HowYouSeeMe robot system.
 - **[YOLO11_INTEGRATION.md](YOLO11_INTEGRATION.md)** - YOLO11 object detection
 
 ### SLAM & Navigation
+- **[PHASE1_KALIBR_CALIBRATION.md](PHASE1_KALIBR_CALIBRATION.md)** - Phase 1: Camera-IMU calibration with Kalibr
+- **[PHASE2_ORB_SLAM3_SETUP.md](PHASE2_ORB_SLAM3_SETUP.md)** - Phase 2: ORB-SLAM3 RGB-D+IMU setup
 - **[Kinect_SLAM_Integration.md](Kinect_SLAM_Integration.md)** - SLAM integration with Kinect
 - **[BlueLily_SLAM_Integration_Guide.md](BlueLily_SLAM_Integration_Guide.md)** - IMU fusion for SLAM
 - **[IMU_Integration_Guide.md](IMU_Integration_Guide.md)** - IMU setup and calibration

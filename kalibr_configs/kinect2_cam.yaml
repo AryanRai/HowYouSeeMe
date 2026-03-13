@@ -1,0 +1,8 @@
+cam0:
+  camera_model: pinhole
+  distortion_model: radtan
+  distortion_coeffs: [0.0, 0.0, 0.0, 0.0]  # Kinect pre-rectifies
+  intrinsics: [1081.37, 1081.37, 959.5, 539.5]  # REPLACE with YOUR values from camera_info
+  resolution: [1920, 1080]
+  rostopic: /kinect2/hd/image_color
+  timeshift_cam_imu: 0.0  # Initial estimate, Kalibr will optimize
