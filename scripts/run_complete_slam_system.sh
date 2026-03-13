@@ -133,17 +133,22 @@ echo -e "${GREEN}      ✓ Semantic projection running${NC}"
 # 4. Start Rerun Logger (optional)
 if [ "$ENABLE_RERUN" = true ]; then
     echo ""
-    echo -e "${BLUE}[4/7]${NC} Starting Rerun logger..."
-    ros2 run kinect2_slam rerun_logger --ros-args \
-        -p recording_name:=howyouseeme \
-        -p spawn_viewer:=true \
-        -p save_path:="$SESSION_FILE" \
-        -p rgb_downsample:=2 \
-        -p pc_max_points:=50000 > /tmp/rerun.log 2>&1 &
+    echo -e "${BLUE}[4/7]${NC} Starting Rerun logger (conda environment)..."
+    
+    # Run rerun logger in conda environment with numpy 2.x
+    "$SCRIPT_DIR/run_rerun_logger.sh" > /tmp/rerun.log 2>&1 &
     RERUN_PID=$!
     echo "      PID: $RERUN_PID (logs: /tmp/rerun.log)"
-    sleep 3
-    echo -e "${GREEN}      ✓ Rerun logger running${NC}"
+    sleep 5
+    
+    # Check if it's still running
+    if kill -0 $RERUN_PID 2>/dev/null; then
+        echo -e "${GREEN}      ✓ Rerun logger running${NC}"
+    else
+        echo -e "${YELLOW}      ⚠ Rerun failed to start (check /tmp/rerun.log)${NC}"
+        ENABLE_RERUN=false
+    fi
+    
     CV_STEP="[5/7]"
     RVIZ_STEP="[6/7]"
     STATUS_STEP="[7/7]"

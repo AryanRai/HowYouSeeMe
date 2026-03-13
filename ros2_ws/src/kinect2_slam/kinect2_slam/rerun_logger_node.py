@@ -2,12 +2,25 @@
 """
 Rerun Visualisation Node for HowYouSeeMe
 Mirrors all ROS topics into Rerun for timeline scrubbing and session replay.
+
+Can be run with conda python for numpy 2.x compatibility:
+    ~/anaconda3/envs/howyouseeme/bin/python rerun_logger_node.py
 """
+
+import sys
+import os
+
+# Add ROS2 to path when running from conda
+if 'PYTHONPATH' in os.environ:
+    for path in os.environ['PYTHONPATH'].split(':'):
+        if path not in sys.path:
+            sys.path.append(path)
 
 import rclpy
 import rerun as rr
 import numpy as np
 import json
+from datetime import datetime
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import Image, PointCloud2
@@ -15,7 +28,14 @@ from sensor_msgs_py import point_cloud2 as pc2
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import MarkerArray
 from std_msgs.msg import String, Bool
-from cv_bridge import CvBridge
+
+# Import cv_bridge only if numpy < 2 (system python)
+try:
+    from cv_bridge import CvBridge
+    HAS_CV_BRIDGE = True
+except ImportError:
+    HAS_CV_BRIDGE = False
+    print("Warning: cv_bridge not available, using manual image conversion")
 
 BEST_EFFORT = QoSProfile(
     reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -31,7 +51,7 @@ class RerunLogger(Node):
         # Parameters
         self.declare_parameter('recording_name', 'howyouseeme')
         self.declare_parameter('spawn_viewer', True)
-        self.declare_parameter('save_path', '')
+        self.declare_parameter('save_path', f'/tmp/howyouseeme_{datetime.now().strftime("%Y%m%d_%H%M%S")}.rrd')
         self.declare_parameter('rgb_downsample', 2)
         self.declare_parameter('pc_max_points', 50000)
         
@@ -43,7 +63,7 @@ class RerunLogger(Node):
         if save:
             rr.save(save)
         
-        self.bridge = CvBridge()
+        self.bridge = CvBridge() if HAS_CV_BRIDGE else None
         self.ds = self.get_parameter('rgb_downsample').value
         self.max_pts = self.get_parameter('pc_max_points').value
         
@@ -82,22 +102,44 @@ class RerunLogger(Node):
     def _stamp_to_ns(self, header):
         return header.stamp.sec * 1_000_000_000 + header.stamp.nanosec
     
+    def _set_time(self, header):
+        """Set timeline time for Rerun 0.30.x API"""
+        timestamp_ns = self._stamp_to_ns(header)
+        rr.set_time("ros_time", timestamp_ns)
+    
+    def _convert_image(self, msg, encoding='rgb8'):
+        """Manual image conversion when cv_bridge unavailable"""
+        if self.bridge:
+            return self.bridge.imgmsg_to_cv2(msg, encoding)
+        
+        # Manual conversion for common encodings
+        if encoding == 'rgb8':
+            img = np.frombuffer(msg.data, dtype=np.uint8)
+            img = img.reshape((msg.height, msg.width, 3))
+            return img
+        elif encoding == '16UC1':
+            img = np.frombuffer(msg.data, dtype=np.uint16)
+            img = img.reshape((msg.height, msg.width))
+            return img
+        else:
+            raise ValueError(f"Unsupported encoding: {encoding}")
+    
     def rgb_cb(self, msg):
-        rr.set_time_nanos('ros_time', self._stamp_to_ns(msg.header))
-        img = self.bridge.imgmsg_to_cv2(msg, 'rgb8')
+        self._set_time(msg.header)
+        img = self._convert_image(msg, 'rgb8')
         if self.ds > 1:
             img = img[::self.ds, ::self.ds]
         rr.log('camera/rgb', rr.Image(img))
     
     def depth_cb(self, msg):
-        rr.set_time_nanos('ros_time', self._stamp_to_ns(msg.header))
-        depth = self.bridge.imgmsg_to_cv2(msg, '16UC1')
+        self._set_time(msg.header)
+        depth = self._convert_image(msg, '16UC1')
         if self.ds > 1:
             depth = depth[::self.ds, ::self.ds]
         rr.log('camera/depth', rr.DepthImage(depth, meter=1000.0))
     
     def pose_cb(self, msg):
-        rr.set_time_nanos('ros_time', self._stamp_to_ns(msg.header))
+        self._set_time(msg.header)
         p = msg.pose.position
         q = msg.pose.orientation
         
@@ -114,7 +156,7 @@ class RerunLogger(Node):
         ))
     
     def tsdf_cb(self, msg):
-        rr.set_time_nanos('ros_time', self._stamp_to_ns(msg.header))
+        self._set_time(msg.header)
         pts_gen = pc2.read_points(msg, field_names=('x', 'y', 'z'), skip_nans=True)
         pts = np.array(list(pts_gen), dtype=np.float32)
         
@@ -153,13 +195,7 @@ class RerunLogger(Node):
                 label = det.get('class_name', '?')
                 conf = det.get('confidence', 0.0)
                 labels.append(f"{label} {conf:.2f}")
-                
-                # Color by class
-                h = hash(label) % 360
-                r = int(128 + 127 * np.sin(np.radians(h)))
-                g = int(128 + 127 * np.sin(np.radians(h + 120)))
-                b = int(128 + 127 * np.sin(np.radians(h + 240)))
-                colors.append([r, g, b])
+                colors.append(self._hash_color(label))
             
             rr.log('camera/detections', rr.Boxes2D(
                 array=boxes,
@@ -169,6 +205,14 @@ class RerunLogger(Node):
             ))
         except Exception as e:
             self.get_logger().warn(f'YOLO log error: {e}')
+    
+    def _hash_color(self, label):
+        """Generate consistent color from label"""
+        h = hash(label) % 360
+        r = int(128 + 127 * np.sin(np.radians(h)))
+        g = int(128 + 127 * np.sin(np.radians(h + 120)))
+        b = int(128 + 127 * np.sin(np.radians(h + 240)))
+        return [r, g, b]
     
     def world_state_cb(self, msg):
         try:
@@ -202,12 +246,6 @@ class RerunLogger(Node):
                     labels=labels,
                     colors=colors,
                     radii=[0.06]
-                ))
-                
-                # Summary text
-                rr.log('world/summary', rr.TextLog(
-                    f"Tracked objects: {len(pts)}",
-                    level=rr.TextLogLevel.INFO
                 ))
         except Exception as e:
             self.get_logger().warn(f'World state log error: {e}')
