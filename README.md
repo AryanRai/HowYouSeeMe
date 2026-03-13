@@ -96,6 +96,55 @@ System Commands:
 - 30+ ROS2 topics
 - Calibrated depth and color alignment
 
+## 🚀 Quick Start
+
+### Complete SLAM + CV System
+
+```bash
+# Launch everything (Kinect + ORB-SLAM3 + TSDF + Semantic + CV Pipeline + RViz)
+./scripts/run_complete_slam_system.sh
+
+# From the CV menu that opens, start YOLO detection:
+# Select: 3) YOLO11 → 1) Detection → Stream mode (5 FPS)
+
+# View results in RViz (opens automatically)
+# - Yellow text labels show detected objects in 3D
+# - TF frames show camera pose and object locations
+# - TSDF point cloud shows 3D reconstruction
+
+# Stop everything
+./scripts/kill_all_slam.sh
+```
+
+### System Health Check
+
+```bash
+# Check all components
+./scripts/test_complete_system.sh
+
+# Debug markers not showing
+./scripts/diagnose_markers.sh
+
+# View command reference
+cat scripts/QUICK_REFERENCE.txt
+```
+
+### Key Topics
+
+```bash
+# Camera pose in world frame
+ros2 topic echo /orb_slam3/pose
+
+# CV detections (YOLO/SAM2/Face)
+ros2 topic echo /cv_pipeline/results
+
+# 3D semantic markers
+ros2 topic echo /semantic/markers
+
+# World state (all tracked objects)
+cat /tmp/world_state.json | python3 -m json.tool
+```
+
 ## 🏗️ System Architecture
 
 ### UML Class Diagram

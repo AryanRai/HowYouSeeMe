@@ -40,16 +40,16 @@ timeout 2 ros2 run tf2_ros tf2_echo map camera_link 2>&1 | head -10 || echo "   
 
 echo ""
 echo "[3] Checking RViz configuration..."
-if [ -f "tsdf_rviz.rviz" ]; then
+if [ -f "rviz_configs/tsdf_rviz.rviz" ]; then
     echo "    ✓ RViz config exists"
     
     echo ""
     echo "    Checking Fixed Frame..."
-    grep "Fixed Frame:" tsdf_rviz.rviz
+    grep "Fixed Frame:" rviz_configs/tsdf_rviz.rviz
     
     echo ""
     echo "    Checking MarkerArray config..."
-    grep -A 10 "MarkerArray" tsdf_rviz.rviz | head -15
+    grep -A 10 "MarkerArray" rviz_configs/tsdf_rviz.rviz | head -15
 else
     echo "    ✗ RViz config not found"
 fi

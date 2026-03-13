@@ -113,7 +113,7 @@ echo -e "${GREEN}      ✓ CV Pipeline server running${NC}"
 # 5. Start RViz2
 echo ""
 echo -e "${BLUE}[5/6]${NC} Starting RViz2..."
-rviz2 -d "$WORKSPACE_ROOT/tsdf_rviz.rviz" > /tmp/rviz.log 2>&1 &
+rviz2 -d "$WORKSPACE_ROOT/rviz_configs/tsdf_rviz.rviz" > /tmp/rviz.log 2>&1 &
 RVIZ_PID=$!
 echo "      PID: $RVIZ_PID"
 sleep 3
