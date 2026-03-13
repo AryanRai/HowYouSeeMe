@@ -1,49 +1,85 @@
 # Scripts Directory
 
-This directory contains all operational scripts for the HowYouSeeMe robot system.
+This directory contains all operational scripts for the HowYouSeeMe SLAM + CV Pipeline system.
 
-## Main System Launchers
+## Main Scripts
 
-- `launch_robot_head.sh` - Launch complete robot head system (Kinect + BlueLily IMU + SLAM + CV Pipeline + RViz)
-- `launch_full_system_rviz.sh` - Launch complete system with SLAM map, point clouds, and SAM2 segmentation visualizations
-- `launch_kinect_sam2_server.sh` - Launch Kinect + CV Pipeline Server V2 (multi-model support)
+### Launch & Control
+- **run_complete_slam_system.sh** - Launch the complete system (Kinect + ORB-SLAM3 + TSDF + Semantic + CV Pipeline + RViz)
+- **kill_all_slam.sh** - Stop all SLAM-related processes
+- **cv_pipeline_menu.sh** - Interactive menu for CV model selection (YOLO, SAM2, InsightFace, etc.)
 
-## Component Launchers
+### Testing & Diagnostics
+- **test_complete_system.sh** - Comprehensive system health check
+- **diagnose_markers.sh** - Debug marker visibility in RViz
+- **debug_semantic.sh** - Debug semantic projection pipeline
 
-- `launch_kinect2_ros2_slam_fixed_tf.sh` - Launch Kinect v2 with RTABMap SLAM using kinect2_ros2 bridge (corrected coordinate frames)
-- `launch_kinect2_slam_with_imu.sh` - Launch Kinect v2 with RTABMap SLAM + IMU fusion
-- `launch_bluelily_bridge.sh` - Launch BlueLily IMU bridge in ROS2 Humble Docker container
-- `launch_rviz_kinect.sh` - Launch RViz with Kinect configuration
+### Utilities
+- **restart_semantic_only.sh** - Quick restart of semantic projection node
+- **QUICK_REFERENCE.txt** - Complete command reference guide
 
-## Interactive Menus
+## Setup Scripts
 
-- `cv_menu.sh` - Quick launcher for CV Pipeline Menu with system check
-- `cv_pipeline_menu.sh` - Interactive CV Pipeline Menu with nested model-specific menus (auto-executes after parameter input)
+### ORB-SLAM3 Setup
+- **setup_orb_slam3.sh** - Build ORB-SLAM3 from source
+- **build_phase2_3.sh** - Build ROS2 packages for Phase 2-3
+- **fix_orb_slam3_cpp14.sh** - Apply C++14 compatibility patches
+- **patch_orb_slam3_cmake.sh** - Patch CMake files for ROS2 compatibility
 
-## CV Pipeline Control
+### CV Pipeline Setup
+- **install_hsemotion.sh** - Install HSEmotion for emotion detection
+- **install_insightface.sh** - Install InsightFace for face recognition
 
-- `start_sam2_stream.sh` - Start SAM2 streaming mode for continuous segmentation
-- `stop_sam2_stream.sh` - Stop SAM2/CV Pipeline streaming mode
-- `stop_cv_streaming.sh` - Quick script to stop CV Pipeline streaming
-- `reset_cv_server.sh` - Force reset CV Pipeline server state
+### Verification
+- **verify_orb_slam3.sh** - Verify ORB-SLAM3 installation
+- **verify_bluelily_bridge.sh** - Verify IMU bridge setup
+- **check_phase2_3_deps.sh** - Check all Phase 2-3 dependencies
 
-## System Management
+## Calibration Scripts (Phase 1)
 
-- `kill_all.sh` - Robust kill script for ALL Kinect, ROS2, SLAM, and CV pipeline processes
-- `kill_kinect.sh` - Kill all Kinect and ROS2 related processes
+- **extract_kinect_intrinsics.sh** - Extract camera intrinsics from Kinect
+- **record_kalibr_bag.sh** - Record ROS2 bag for Kalibr calibration
+- **kalibr_to_orb_slam3.py** - Convert Kalibr results to ORB-SLAM3 format
+- **kalibr_to_tf2.py** - Convert Kalibr results to TF2 static transforms
 
-## Installation Scripts
-
-- `install_hsemotion.sh` - Install HSEmotion (high-speed emotion recognition)
-- `install_insightface.sh` - Install InsightFace for face recognition
-
-## Usage
-
-All scripts are executable. Run them from the project root directory:
+## Quick Start
 
 ```bash
-./scripts/launch_robot_head.sh
-./scripts/cv_menu.sh
+# 1. Launch the complete system
+./scripts/run_complete_slam_system.sh
+
+# 2. From the CV menu that opens, start YOLO detection:
+#    Select: 3) YOLO11 → 1) Detection → Stream mode (5 FPS)
+
+# 3. View results in RViz (opens automatically)
+
+# 4. Stop everything
+./scripts/kill_all_slam.sh
 ```
 
-For scripts that accept parameters, run without arguments to see usage information.
+## Troubleshooting
+
+```bash
+# Check system health
+./scripts/test_complete_system.sh
+
+# Debug markers not showing
+./scripts/diagnose_markers.sh
+
+# Debug semantic projection
+./scripts/debug_semantic.sh
+
+# View quick reference
+cat scripts/QUICK_REFERENCE.txt
+```
+
+## Archive
+
+The `archive/` subdirectory contains old/deprecated scripts kept for reference. These are not needed for normal operation.
+
+## Notes
+
+- All scripts assume you're running from the workspace root directory
+- ROS2 Jazzy environment is sourced automatically by launch scripts
+- Logs are written to `/tmp/*.log` files
+- World state is saved to `/tmp/world_state.json`

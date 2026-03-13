@@ -102,7 +102,7 @@ echo -e "${GREEN}      ✓ Semantic projection running${NC}"
 # 4. Start CV Pipeline Server (Python)
 echo ""
 echo -e "${BLUE}[4/6]${NC} Starting CV Pipeline server (Python)..."
-nohup "$WORKSPACE_ROOT/anaconda3/envs/howyouseeme/bin/python" \
+nohup ~/anaconda3/envs/howyouseeme/bin/python \
     "$WORKSPACE_ROOT/ros2_ws/src/cv_pipeline/python/sam2_server_v2.py" \
     > /tmp/cv_pipeline.log 2>&1 &
 CV_PIPELINE_PID=$!
@@ -113,7 +113,7 @@ echo -e "${GREEN}      ✓ CV Pipeline server running${NC}"
 # 5. Start RViz2
 echo ""
 echo -e "${BLUE}[5/6]${NC} Starting RViz2..."
-rviz2 -d "$WORKSPACE_ROOT/tsdf_rviz.rviz" > /tmp/rviz.log 2>&1 &
+rviz2 -d "$WORKSPACE_ROOT/rviz_configs/tsdf_rviz.rviz" > /tmp/rviz.log 2>&1 &
 RVIZ_PID=$!
 echo "      PID: $RVIZ_PID"
 sleep 3

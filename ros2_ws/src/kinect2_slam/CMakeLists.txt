@@ -98,6 +98,9 @@ ament_target_dependencies(orb_slam3_node
   geometry_msgs
   cv_bridge
   message_filters
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
 )
 
 # Install Python modules

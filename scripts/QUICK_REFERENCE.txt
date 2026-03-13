@@ -1,0 +1,152 @@
+================================================================================
+  COMPLETE SLAM + CV PIPELINE + SEMANTIC PROJECTION - QUICK REFERENCE
+================================================================================
+
+LAUNCH SYSTEM
+-------------
+  ./scripts/run_complete_slam_system.sh
+  
+  Components started:
+    1. Kinect v2 RGB-D
+    2. ORB-SLAM3 (RGB-D tracking)
+    3. TSDF volumetric mapping
+    4. Semantic projection (3D object labels)
+    5. CV Pipeline server
+    6. RViz2 visualization
+
+STOP SYSTEM
+-----------
+  ./scripts/kill_all_slam.sh
+  
+  Or press Ctrl+C in the launch terminal
+
+TEST & DIAGNOSE
+---------------
+  ./scripts/test_complete_system.sh      # Check all components
+  ./scripts/diagnose_markers.sh          # Debug marker visibility
+  ./scripts/debug_semantic.sh            # Debug semantic projection
+
+START CV DETECTION
+------------------
+  From CV Pipeline menu (opens automatically):
+    3) YOLO11 → 1) Detection → Stream mode
+    
+  Or manually:
+    ./scripts/cv_pipeline_menu.sh
+
+KEY TOPICS
+----------
+  /orb_slam3/pose                 # Camera pose in world frame
+  /cv_pipeline/results            # YOLO/SAM2/Face detections (JSON)
+  /cv_pipeline/visualization      # Annotated image
+  /semantic/markers               # 3D text labels (MarkerArray)
+  /semantic/world_state           # All tracked objects (JSON)
+  /tsdf/pointcloud                # 3D reconstruction
+  /kinect2/hd/image_color         # RGB camera
+  /kinect2/hd/image_depth_rect    # Depth image
+
+TF2 FRAMES
+----------
+  map                             # World frame (ORB-SLAM3 origin)
+  camera_pose / camera_link       # Camera in world frame
+  yolo_<class>_<id>               # Each detected object
+  face_<name>_<id>                # Each detected face
+  sam2_seg_<id>                   # Each segmentation mask
+
+WORLD STATE
+-----------
+  File:   /tmp/world_state.json
+  Topic:  /semantic/world_state
+  
+  View:   cat /tmp/world_state.json | python3 -m json.tool
+
+RVIZ DISPLAYS
+-------------
+  • Grid                          # Reference grid
+  • TF                            # All coordinate frames
+  • Kinect RGB                    # Camera feed
+  • TSDF Point Cloud              # 3D reconstruction
+  • Semantic Labels               # Object labels in 3D
+  • ORB-SLAM3 Path                # Camera trajectory
+
+USEFUL COMMANDS
+---------------
+  # Export TSDF mesh
+  ros2 service call /tsdf/export_mesh std_srvs/srv/Trigger
+  
+  # Check topic rates
+  ros2 topic hz /orb_slam3/pose
+  ros2 topic hz /cv_pipeline/results
+  ros2 topic hz /semantic/markers
+  
+  # View TF tree
+  ros2 run tf2_ros tf2_monitor --all-frames
+  ros2 run tf2_ros tf2_echo map camera_pose
+  
+  # Monitor world state
+  watch -n 1 'cat /tmp/world_state.json | python3 -m json.tool | head -30'
+
+LOGS
+----
+  /tmp/phase2.log                 # Kinect + ORB-SLAM3
+  /tmp/tsdf.log                   # TSDF integrator
+  /tmp/semantic.log               # Semantic projection
+  /tmp/cv_pipeline.log            # CV Pipeline server
+  /tmp/rviz.log                   # RViz2
+
+TROUBLESHOOTING
+---------------
+  No markers in RViz:
+    1. Check ORB-SLAM3 is tracking (move camera)
+    2. Start YOLO detection from CV menu
+    3. Enable "Semantic Labels" in RViz
+    4. Check Fixed Frame is "map"
+    5. Run: ./scripts/diagnose_markers.sh
+  
+  No camera pose TF:
+    1. Rebuild: cd ros2_ws && colcon build --packages-select kinect2_slam
+    2. Check ORB-SLAM3 tracking status
+    3. Verify: ros2 topic echo /orb_slam3/pose
+  
+  No CV detections:
+    1. Start YOLO from CV Pipeline menu
+    2. Check: ros2 topic echo /cv_pipeline/results
+    3. Verify Kinect is publishing images
+  
+  ORB-SLAM3 "waiting for image":
+    1. Check Kinect is connected: lsusb | grep Kinect
+    2. Verify topics: ros2 topic list | grep kinect2
+    3. Check image rate: ros2 topic hz /kinect2/hd/image_color
+
+SUPPORTED CV MODELS
+-------------------
+  YOLO11:
+    • Detection (bounding boxes)
+    • Segmentation (instance masks)
+    • Pose estimation (keypoints)
+    • OBB (oriented bounding boxes)
+  
+  SAM2 / FastSAM:
+    • Segmentation masks
+    • Point/box/text prompts
+  
+  InsightFace:
+    • Face detection
+    • Face recognition
+    • Emotion detection
+    • Age/gender estimation
+
+PERFORMANCE TIPS
+----------------
+  • Lower TSDF resolution: voxel_length:=0.08
+  • Reduce marker lifetime: marker_lifetime:=10.0
+  • Increase confidence threshold: conf_threshold:=0.6
+  • Limit depth range: depth_trunc:=3.0
+
+DOCUMENTATION
+-------------
+  docs/PHASE2_ORB_SLAM3_SETUP.md          # ORB-SLAM3 setup
+  docs/PHASE3_TSDF_INTEGRATION.md         # TSDF integration
+  ros2_ws/src/cv_pipeline/README.md       # CV Pipeline guide
+  
+================================================================================
