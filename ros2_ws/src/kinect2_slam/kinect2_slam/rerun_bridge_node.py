@@ -86,9 +86,11 @@ class HowYouSeeMeBridge(Node):
         self._last_rgb_time = 0.0
         self._last_depth_time = 0.0
         self._last_tsdf_time = 0.0
-        self._rgb_interval = 0.1    # max 10 Hz
-        self._depth_interval = 0.2  # max 5 Hz
-        self._tsdf_interval = 2.0   # max 0.5 Hz
+        self._last_pose_time = 0.0
+        self._rgb_interval = 0.5    # 2 Hz
+        self._depth_interval = 1.0  # 1 Hz
+        self._tsdf_interval = 5.0   # every 5s
+        self._pose_interval = 0.1   # 10 Hz
 
         cbg = ReentrantCallbackGroup()
 
@@ -150,6 +152,11 @@ class HowYouSeeMeBridge(Node):
     # ── Pose + trajectory ─────────────────────────────────────────────────────
 
     def _pose_cb(self, msg: PoseStamped) -> None:
+        import time
+        now = time.monotonic()
+        if now - self._last_pose_time < self._pose_interval:
+            return
+        self._last_pose_time = now
         try:
             self._set_time(msg.header.stamp)
             p, q = msg.pose.position, msg.pose.orientation

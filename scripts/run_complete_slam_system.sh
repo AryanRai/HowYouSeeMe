@@ -52,6 +52,8 @@ export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v conda | tr '\n' ':' | sed 's/
 source /opt/ros/jazzy/setup.bash
 source "$WORKSPACE_ROOT/ros2_ws/install/setup.bash"
 export LD_LIBRARY_PATH="$WORKSPACE_ROOT/libfreenect2/freenect2/lib:/home/aryan/ORB_SLAM3/lib:$LD_LIBRARY_PATH"
+# Ensure user-installed packages (ultralytics etc.) are visible to system python3
+export PYTHONPATH="$HOME/.local/lib/python3.12/site-packages:$PYTHONPATH"
 
 # 1. Start Phase 2 (Kinect + ORB-SLAM3)
 echo -e "${BLUE}[1/6]${NC} Starting Kinect + ORB-SLAM3..."
@@ -140,12 +142,10 @@ echo -e "${BLUE}[4/8]${NC} Starting memory system (5-tier)..."
     sleep 3
     echo -e "${GREEN}      ✓ Memory system running (4 nodes)${NC}"
 
-# 5. Start CV Pipeline Server (Python) - use system python for NumPy 1.x compatibility
+# 5. Start CV Pipeline Server — system python3 now has ultralytics via --user install
 echo ""
-echo -e "${BLUE}[5/7]${NC} Starting CV Pipeline server (Python)..."
-nohup python3 \
-    "$WORKSPACE_ROOT/ros2_ws/src/cv_pipeline/python/sam2_server_v2.py" \
-    > /tmp/cv_pipeline.log 2>&1 &
+echo -e "${BLUE}[5/7]${NC} Starting CV Pipeline server..."
+python3 "$WORKSPACE_ROOT/ros2_ws/src/cv_pipeline/python/sam2_server_v2.py" > /tmp/cv_pipeline.log 2>&1 &
 CV_PIPELINE_PID=$!
 echo "      PID: $CV_PIPELINE_PID (logs: /tmp/cv_pipeline.log)"
 sleep 5
@@ -165,6 +165,7 @@ bash -c "
     export LD_LIBRARY_PATH=\$(echo \"\$LD_LIBRARY_PATH\" | tr ':' '\n' | grep -v conda | tr '\n' ':' | sed 's/:\$//')
     export LD_LIBRARY_PATH=\"$WORKSPACE_ROOT/libfreenect2/freenect2/lib:/home/aryan/ORB_SLAM3/lib:\$LD_LIBRARY_PATH\"
     unset CONDA_DEFAULT_ENV CONDA_PREFIX CONDA_PYTHON_EXE CONDA_SHLVL PYTHONPATH
+    export RERUN_FLUSH_NUM_BYTES=104857600
     source /opt/ros/jazzy/setup.bash
     source '$WORKSPACE_ROOT/ros2_ws/install/setup.bash'
     python3 '$WORKSPACE_ROOT/ros2_ws/src/kinect2_slam/kinect2_slam/rerun_bridge_node.py' --connect

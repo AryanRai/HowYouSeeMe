@@ -53,12 +53,13 @@ class WorldSynthesiserNode(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         
-        qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
+        qos_reliable = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
+        qos_be = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
         
         # Subscribers
-        self.pose_sub = self.create_subscription(PoseStamped, '/orb_slam3/pose', self.pose_callback, qos)
-        self.detection_sub = self.create_subscription(String, '/cv_pipeline/results', self.detection_callback, qos)
-        self.depth_sub = self.create_subscription(Image, '/kinect2/hd/image_depth_rect', self.depth_callback, qos)
+        self.pose_sub = self.create_subscription(PoseStamped, '/orb_slam3/pose', self.pose_callback, qos_be)
+        self.detection_sub = self.create_subscription(String, '/cv_pipeline/results', self.detection_callback, qos_reliable)
+        self.depth_sub = self.create_subscription(Image, '/kinect2/hd/image_depth_rect', self.depth_callback, qos_be)
         
         # Publishers
         self.world_state_pub = self.create_publisher(String, '/semantic/world_state', 10)
@@ -75,7 +76,14 @@ class WorldSynthesiserNode(Node):
     def detection_callback(self, msg):
         try:
             data = json.loads(msg.data)
-            self.current_detections = data.get('detections', [])
+            if 'error' in data:
+                return
+            dets = data.get('detections', [])
+            # Normalise: YOLO uses 'class_name', spec uses 'label'
+            for d in dets:
+                if 'label' not in d:
+                    d['label'] = d.get('class_name', d.get('label', 'unknown'))
+            self.current_detections = dets
         except json.JSONDecodeError:
             pass
     

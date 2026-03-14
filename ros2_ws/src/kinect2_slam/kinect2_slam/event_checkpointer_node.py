@@ -44,27 +44,27 @@ class EventCheckpointerNode(Node):
         self.latest_detections = None
         self.latest_detections_time = None
         
-        # QoS for best effort
-        qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
-        
-        # Synchronized subscribers for images + pose
-        self.rgb_sub = Subscriber(self, Image, '/kinect2/hd/image_color', qos_profile=qos)
-        self.depth_sub = Subscriber(self, Image, '/kinect2/hd/image_depth_rect', qos_profile=qos)
-        self.pose_sub = Subscriber(self, PoseStamped, '/orb_slam3/pose', qos_profile=qos)
-        
+        qos_be = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
+        qos_reliable = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
+
+        # Synchronized subscribers for images + pose (sensors → BEST_EFFORT)
+        self.rgb_sub = Subscriber(self, Image, '/kinect2/hd/image_color', qos_profile=qos_be)
+        self.depth_sub = Subscriber(self, Image, '/kinect2/hd/image_depth_rect', qos_profile=qos_be)
+        self.pose_sub = Subscriber(self, PoseStamped, '/orb_slam3/pose', qos_profile=qos_be)
+
         self.sync = ApproximateTimeSynchronizer(
             [self.rgb_sub, self.depth_sub, self.pose_sub],
             queue_size=10,
             slop=0.1
         )
         self.sync.registerCallback(self.sync_callback)
-        
-        # Separate subscriber for YOLO detections
+
+        # CV pipeline publishes RELIABLE — must match
         self.detection_sub = self.create_subscription(
             String,
             '/cv_pipeline/results',
             self.detection_callback,
-            qos
+            qos_reliable
         )
         
         # Publisher for checkpoint events
@@ -76,7 +76,14 @@ class EventCheckpointerNode(Node):
         """Cache latest YOLO detections"""
         try:
             data = json.loads(msg.data)
-            self.latest_detections = data.get('detections', [])
+            if 'error' in data:
+                return
+            dets = data.get('detections', [])
+            # Normalise: YOLO uses 'class_name', spec uses 'label'
+            for d in dets:
+                if 'label' not in d:
+                    d['label'] = d.get('class_name', 'unknown')
+            self.latest_detections = dets
             self.latest_detections_time = time.time()
         except json.JSONDecodeError:
             pass

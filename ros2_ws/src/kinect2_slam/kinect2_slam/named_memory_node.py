@@ -37,12 +37,13 @@ class NamedMemoryNode(Node):
         self.cx = 959.5
         self.cy = 539.5
         
-        qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
+        qos_reliable = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
+        qos_be = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
         
         # Subscribers
-        self.detection_sub = self.create_subscription(String, '/cv_pipeline/results', self.detection_callback, qos)
-        self.pose_sub = self.create_subscription(PoseStamped, '/orb_slam3/pose', self.pose_callback, qos)
-        self.depth_sub = self.create_subscription(Image, '/kinect2/hd/image_depth_rect', self.depth_callback, qos)
+        self.detection_sub = self.create_subscription(String, '/cv_pipeline/results', self.detection_callback, qos_reliable)
+        self.pose_sub = self.create_subscription(PoseStamped, '/orb_slam3/pose', self.pose_callback, qos_be)
+        self.depth_sub = self.create_subscription(Image, '/kinect2/hd/image_depth_rect', self.depth_callback, qos_be)
         
         # Publisher
         self.update_pub = self.create_publisher(String, '/memory/updated', 10)
@@ -87,7 +88,14 @@ class NamedMemoryNode(Node):
         
         try:
             data = json.loads(msg.data)
-            detections = data.get('detections', [])
+            if 'error' in data:
+                return
+            dets = data.get('detections', [])
+            # Normalise class_name → label
+            for d in dets:
+                if 'label' not in d:
+                    d['label'] = d.get('class_name', 'unknown')
+            detections = dets
         except:
             return
         

@@ -689,11 +689,18 @@ class YOLO11Model(BaseModel):
         try:
             print(f"Loading YOLO11 models on {self.device}...")
             
+            # Prefer workspace-local .pt files to avoid downloads
+            _ws = "/home/aryan/Documents/GitHub/HowYouSeeMe"
+            def _pt(name):
+                import os
+                local = os.path.join(_ws, name)
+                return local if os.path.exists(local) else name
+
             # Load different task models (nano versions for speed)
-            self.models["detect"] = YOLO("yolo11n.pt")  # Detection
-            self.models["segment"] = YOLO("yolo11n-seg.pt")  # Segmentation
-            self.models["pose"] = YOLO("yolo11n-pose.pt")  # Pose estimation
-            self.models["obb"] = YOLO("yolo11n-obb.pt")  # Oriented bounding boxes
+            self.models["detect"] = YOLO(_pt("yolo11n.pt"))
+            self.models["segment"] = YOLO(_pt("yolo11n-seg.pt"))
+            self.models["pose"] = YOLO(_pt("yolo11n-pose.pt"))
+            self.models["obb"] = YOLO(_pt("yolo11n-obb.pt"))
             
             self.loaded = True
             print("✅ YOLO11 models loaded and ready!")
