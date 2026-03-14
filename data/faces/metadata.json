@@ -18,9 +18,17 @@
   "person_002": {
     "name": "aryan",
     "first_seen": "2026-03-15 02:18:32",
-    "encounter_count": 925,
+    "encounter_count": 926,
     "samples": 1,
     "last_updated": "2026-03-15 02:18:32",
-    "last_seen": "2026-03-15 02:45:40"
+    "last_seen": "2026-03-15 02:47:20"
+  },
+  "person_003": {
+    "name": "aryan",
+    "first_seen": "2026-03-15 03:11:03",
+    "encounter_count": 1451,
+    "samples": 1,
+    "last_updated": "2026-03-15 03:11:03",
+    "last_seen": "2026-03-15 04:01:18"
   }
 }

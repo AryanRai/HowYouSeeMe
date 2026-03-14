@@ -53,11 +53,16 @@ class WorldSynthesiserNode(Node):
         qos_reliable = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
         qos_be = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
         
+        # Latest RGB frame for Ally's get_camera_frame tool
+        self._latest_rgb = None
+
         # Subscribers
         self.pose_sub = self.create_subscription(PoseStamped, '/orb_slam3/pose', self.pose_callback, qos_be)
         self.detection_sub = self.create_subscription(String, '/cv_pipeline/results', self.detection_callback, qos_reliable)
         self.enriched_sub  = self.create_subscription(String, '/cv_pipeline/enriched', self.enriched_callback, qos_reliable)
         self.depth_sub = self.create_subscription(Image, '/kinect2/hd/image_depth_rect', self.depth_callback, qos_be)
+        self.rgb_sub = self.create_subscription(Image, '/kinect2/hd/image_color',
+                                                lambda m: setattr(self, '_latest_rgb', m), qos_be)
         
         # Publishers
         self.world_state_pub = self.create_publisher(String, '/semantic/world_state', 10)
@@ -177,6 +182,15 @@ class WorldSynthesiserNode(Node):
         world_state['objects'] = self.objects_db
         world_state['people'] = self.people_db
         
+        # Save latest RGB frame for Ally's get_camera_frame tool
+        if self._latest_rgb is not None:
+            try:
+                import cv2
+                rgb_cv = self.bridge.imgmsg_to_cv2(self._latest_rgb, 'bgr8')
+                cv2.imwrite('/tmp/latest_frame.jpg', rgb_cv, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            except Exception:
+                pass
+
         # Write to disk
         try:
             with open(self.world_state_path, 'w') as f:

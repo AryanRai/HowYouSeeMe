@@ -55,8 +55,12 @@ class InsightFaceWorker:
         self.recognizer = None
         self.emotion_detector = None
         
-        # Face database
-        self.database_path = Path("data/faces")
+        # Face database — resolve absolute path from workspace root
+        # This file lives at ros2_ws/src/cv_pipeline/python/insightface_worker.py
+        # Workspace root is 4 levels up
+        _this_file = Path(__file__).resolve()
+        _ws_root = _this_file.parents[4]  # HowYouSeeMe/
+        self.database_path = _ws_root / "data" / "faces"
         self.database_path.mkdir(parents=True, exist_ok=True)
         self.db_file = self.database_path / "face_database.pkl"
         self.metadata_file = self.database_path / "metadata.json"
@@ -64,8 +68,8 @@ class InsightFaceWorker:
         self.face_database = self.load_database()
         self.metadata = self.load_metadata()
         
-        # Recognition parameters
-        self.similarity_threshold = 0.6
+        # Recognition parameters — buffalo_l cosine sim: ~0.3-0.5 for same person
+        self.similarity_threshold = 0.45
         self.min_face_size = 20
         
         print("InsightFace Worker initialized")
@@ -119,7 +123,10 @@ class InsightFaceWorker:
         """Load face database from disk"""
         if self.db_file.exists():
             with open(self.db_file, 'rb') as f:
-                return pickle.load(f)
+                db = pickle.load(f)
+            print(f"[InsightFace] Loaded DB from {self.db_file} — {len(db)} people")
+            return db
+        print(f"[InsightFace] No DB found at {self.db_file} — starting empty")
         return {}
     
     def save_database(self):
@@ -516,6 +523,7 @@ class InsightFaceWorker:
     def match_face(self, embedding: np.ndarray, threshold: float) -> Optional[Dict]:
         """Match face embedding against database"""
         if not self.face_database:
+            print("[InsightFace] match_face: database is empty")
             return None
         
         best_similarity = -1
@@ -533,6 +541,10 @@ class InsightFaceWorker:
                         'name': data['name'],
                         'similarity': float(similarity)
                     }
+        
+        print(f"[InsightFace] Best match: {best_match['name'] if best_match else 'none'} "
+              f"sim={best_similarity:.3f} threshold={threshold:.3f} "
+              f"{'✓ MATCH' if best_similarity >= threshold else '✗ NO MATCH'}")
         
         if best_similarity >= threshold:
             # Update metadata

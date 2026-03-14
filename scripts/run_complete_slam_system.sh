@@ -39,8 +39,8 @@ echo ""
 cleanup() {
     echo ""
     echo -e "${YELLOW}Shutting down all components...${NC}"
-    kill $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $MEMORY_PID5 $RERUN_VIEWER_PID $RERUN_PID $RVIZ_PID 2>/dev/null
-    wait $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $MEMORY_PID5 $RERUN_VIEWER_PID $RERUN_PID $RVIZ_PID 2>/dev/null
+    kill $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $MEMORY_PID5 $RERUN_VIEWER_PID $RERUN_PID $RVIZ_PID $MCP_PID 2>/dev/null
+    wait $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $MEMORY_PID5 $RERUN_VIEWER_PID $RERUN_PID $RVIZ_PID $MCP_PID 2>/dev/null
     echo -e "${GREEN}All processes stopped${NC}"
     exit 0
 }
@@ -193,16 +193,29 @@ else
     echo -e "${GREEN}      ✓ Rerun viewer open + streaming${NC}"
 fi
 
-# 7. Start RViz2
+# 7. Start MCP Server (Ally integration — HTTP on port 8090)
 echo ""
-echo -e "${BLUE}[7/8]${NC} Starting RViz2..."
+echo -e "${BLUE}[7/9]${NC} Starting MCP server for Ally (port 8090)..."
+python3 "$WORKSPACE_ROOT/ros2_ws/src/kinect2_slam/kinect2_slam/mcp_server.py" > /tmp/mcp_server.log 2>&1 &
+MCP_PID=$!
+echo "      PID: $MCP_PID (logs: /tmp/mcp_server.log)"
+sleep 2
+if ! kill -0 $MCP_PID 2>/dev/null; then
+    echo -e "${RED}      ❌ MCP server failed. Check /tmp/mcp_server.log${NC}"
+else
+    echo -e "${GREEN}      ✓ MCP server running — Ally connect at http://localhost:8090/mcp${NC}"
+fi
+
+# 8. Start RViz2
+echo ""
+echo -e "${BLUE}[8/9]${NC} Starting RViz2..."
 rviz2 -d "$WORKSPACE_ROOT/rviz_configs/tsdf_rviz.rviz" > /tmp/rviz.log 2>&1 &
 RVIZ_PID=$!
 echo "      PID: $RVIZ_PID"
 sleep 3
 echo -e "${GREEN}      ✓ RViz2 running${NC}"
 
-# 8. Display system status
+# 9. Display system status
 echo ""
 echo -e "${CYAN}========================================${NC}"
 echo -e "${GREEN}  🎉 System Running!${NC}"
@@ -214,6 +227,7 @@ echo "  Phase 3 (TSDF):      $TSDF_PID"
 echo "  Phase 4 (Semantic):  $SEMANTIC_PID"
 echo "  CV Pipeline:         $CV_PIPELINE_PID"
 echo "  Rerun Bridge:        $RERUN_PID (viewer: $RERUN_VIEWER_PID)"
+echo "  MCP Server:          $MCP_PID  → http://localhost:8090/mcp"
 echo "  Memory System:"
 echo "    - Checkpointer:    $MEMORY_PID1"
 echo "    - Analyser:        $MEMORY_PID2"
@@ -228,6 +242,7 @@ echo "  TSDF:        /tmp/tsdf.log"
 echo "  Semantic:    /tmp/semantic.log"
 echo "  CV Pipeline: /tmp/cv_pipeline.log"
 echo "  Rerun:       /tmp/rerun.log  (recording: /tmp/howyouseeme_live.rrd)"
+echo "  MCP Server:  /tmp/mcp_server.log"
 echo "  Memory:"
 echo "    - Checkpointer:  /tmp/memory_checkpointer.log"
 echo "    - Analyser:      /tmp/memory_analyser.log"
