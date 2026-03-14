@@ -31,20 +31,34 @@ echo ""
 
 # Check for BlueLily IMU
 BLUELILY_ENABLED=false
-if [ -e "/dev/ttyACM0" ]; then
-    echo "✅ BlueLily IMU detected on /dev/ttyACM0"
-    # Fix permissions if needed
-    if [ ! -w "/dev/ttyACM0" ]; then
-        echo "   Fixing permissions..."
-        sudo chmod 666 /dev/ttyACM0
+BLUELILY_PORT=""
+
+# Check common ports
+for port in /dev/ttyACM0 /dev/ttyACM1 /dev/ttyACM2 /dev/ttyUSB0 /dev/ttyUSB1; do
+    if [ -e "$port" ]; then
+        echo "✅ BlueLily IMU detected on $port"
+        # Fix permissions if needed
+        if [ ! -w "$port" ]; then
+            echo "   Fixing permissions..."
+            sudo chmod 666 "$port" 2>/dev/null || true
+        fi
+        BLUELILY_ENABLED=true
+        BLUELILY_PORT="$port"
+        break
     fi
-    BLUELILY_ENABLED=true
-else
-    echo "⚠️  BlueLily IMU not found on /dev/ttyACM0"
-    echo "   Continue without IMU? (y/n)"
-    read -r response
-    if [[ ! "$response" =~ ^[Yy]$ ]]; then
-        exit 1
+done
+
+if [ "$BLUELILY_ENABLED" = false ]; then
+    echo "⚠️  BlueLily IMU not found on any port"
+    # Check if running non-interactively (from another script)
+    if [ -t 0 ]; then
+        echo "   Continue without IMU? (y/n)"
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    else
+        echo "   Continuing without IMU (non-interactive mode)"
     fi
 fi
 
@@ -95,10 +109,10 @@ STEP=1
 
 # 1. Start BlueLily IMU (if available)
 if [ "$BLUELILY_ENABLED" = true ]; then
-    echo "$STEP/$TOTAL Starting BlueLily IMU bridge..."
+    echo "$STEP/$TOTAL Starting BlueLily IMU bridge on $BLUELILY_PORT..."
     STEP=$((STEP+1))
     ros2 run bluelily_bridge bluelily_imu_node --ros-args \
-        -p port:=/dev/ttyACM0 \
+        -p port:="$BLUELILY_PORT" \
         -p baud_rate:=115200 \
         -p frame_id:=bluelily_imu &
     BLUELILY_PID=$!

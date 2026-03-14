@@ -1,16 +1,9 @@
 #!/bin/bash
 # Complete SLAM System with Semantic Projection
 # Launches: Kinect + ORB-SLAM3 + TSDF + Semantic + CV Pipeline + RViz
-# Optional: Add --rerun flag to enable recording
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(dirname "$SCRIPT_DIR")"
-
-# Check for --rerun flag
-ENABLE_RERUN=false
-if [[ "$1" == "--rerun" ]]; then
-    ENABLE_RERUN=true
-fi
 
 # Colors
 RED='\033[0;31m'
@@ -31,15 +24,12 @@ echo "  3. TSDF volumetric mapping"
 echo "  4. Semantic projection (3D labels)"
 echo "  5. CV Pipeline server"
 echo "  6. RViz2 visualization"
-if [ "$ENABLE_RERUN" = true ]; then
-    echo "  7. Rerun logger (recording enabled)"
-    SESSION_FILE="/tmp/howyouseeme_$(date +%Y%m%d_%H%M%S).rrd"
-    echo ""
-    echo -e "${GREEN}Rerun recording:${NC} $SESSION_FILE"
-fi
+echo "  7. Memory system (5-tier)"
 echo ""
 echo -e "${YELLOW}After startup, CV Pipeline menu will open${NC}"
 echo -e "${YELLOW}Use YOLO detection for semantic mapping${NC}"
+echo ""
+echo -e "${YELLOW}Note: Rerun C++ disabled (Arrow version mismatch)${NC}"
 echo ""
 echo "Press Ctrl+C to stop all components"
 echo -e "${CYAN}========================================${NC}"
@@ -49,23 +39,9 @@ echo ""
 cleanup() {
     echo ""
     echo -e "${YELLOW}Shutting down all components...${NC}"
-    if [ "$ENABLE_RERUN" = true ]; then
-        kill $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $RERUN_PID $RVIZ_PID 2>/dev/null
-        wait $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $RERUN_PID $RVIZ_PID 2>/dev/null
-    else
-        kill $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $RVIZ_PID 2>/dev/null
-        wait $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $RVIZ_PID 2>/dev/null
-    fi
+    kill $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $RVIZ_PID 2>/dev/null
+    wait $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $RVIZ_PID 2>/dev/null
     echo -e "${GREEN}All processes stopped${NC}"
-    if [ "$ENABLE_RERUN" = true ]; then
-        echo ""
-        echo -e "${CYAN}Rerun recording saved:${NC}"
-        echo "  $SESSION_FILE"
-        echo ""
-        echo "Replay with:"
-        echo "  rerun $SESSION_FILE"
-        echo ""
-    fi
     exit 0
 }
 
@@ -95,7 +71,8 @@ echo -e "${GREEN}      ✓ ORB-SLAM3 running${NC}"
 # 2. Start Phase 3 (TSDF)
 echo ""
 echo -e "${BLUE}[2/6]${NC} Starting TSDF integrator..."
-ros2 run kinect2_slam tsdf_integrator --ros-args \
+python3 "$WORKSPACE_ROOT/ros2_ws/src/kinect2_slam/kinect2_slam/tsdf_integrator_node.py" \
+    --ros-args \
     -p voxel_length:=0.04 \
     -p sdf_trunc:=0.08 \
     -p publish_rate:=1.0 \
@@ -112,7 +89,8 @@ echo -e "${GREEN}      ✓ TSDF running${NC}"
 # 3. Start Phase 4 (Semantic Projection)
 echo ""
 echo -e "${BLUE}[3/6]${NC} Starting semantic projection..."
-ros2 run cv_pipeline semantic_projection --ros-args \
+python3 "$WORKSPACE_ROOT/ros2_ws/src/cv_pipeline/cv_pipeline/semantic_projection_node.py" \
+    --ros-args \
     -p fx:=1081.37 \
     -p fy:=1081.37 \
     -p cx:=959.5 \
@@ -130,38 +108,41 @@ echo "      PID: $SEMANTIC_PID (logs: /tmp/semantic.log)"
 sleep 2
 echo -e "${GREEN}      ✓ Semantic projection running${NC}"
 
-# 4. Start Rerun Logger (optional)
-if [ "$ENABLE_RERUN" = true ]; then
-    echo ""
-    echo -e "${BLUE}[4/7]${NC} Starting Rerun logger (conda environment)..."
-    
-    # Run rerun logger in conda environment with numpy 2.x
-    "$SCRIPT_DIR/run_rerun_logger.sh" > /tmp/rerun.log 2>&1 &
-    RERUN_PID=$!
-    echo "      PID: $RERUN_PID (logs: /tmp/rerun.log)"
-    sleep 5
-    
-    # Check if it's still running
-    if kill -0 $RERUN_PID 2>/dev/null; then
-        echo -e "${GREEN}      ✓ Rerun logger running${NC}"
-    else
-        echo -e "${YELLOW}      ⚠ Rerun failed to start (check /tmp/rerun.log)${NC}"
-        ENABLE_RERUN=false
-    fi
-    
-    CV_STEP="[5/7]"
-    RVIZ_STEP="[6/7]"
-    STATUS_STEP="[7/7]"
-else
-    CV_STEP="[4/6]"
-    RVIZ_STEP="[5/6]"
-    STATUS_STEP="[6/6]"
-fi
-
-# 5. Start CV Pipeline Server (Python)
+# 4. Start Memory System (5-tier)
 echo ""
-echo -e "${BLUE}${CV_STEP}${NC} Starting CV Pipeline server (Python)..."
-nohup ~/anaconda3/envs/howyouseeme/bin/python \
+echo -e "${BLUE}[4/8]${NC} Starting memory system (5-tier)..."
+    
+    # Create directories
+    mkdir -p /tmp/stm
+    mkdir -p ~/howyouseeme_persistent
+    
+    # Event checkpointer
+    python3 "$WORKSPACE_ROOT/ros2_ws/src/kinect2_slam/kinect2_slam/event_checkpointer_node.py" > /tmp/memory_checkpointer.log 2>&1 &
+    MEMORY_PID1=$!
+    echo "      Event checkpointer PID: $MEMORY_PID1"
+    
+    # Async analyser
+    python3 "$WORKSPACE_ROOT/ros2_ws/src/kinect2_slam/kinect2_slam/async_analyser_node.py" > /tmp/memory_analyser.log 2>&1 &
+    MEMORY_PID2=$!
+    echo "      Async analyser PID: $MEMORY_PID2"
+    
+    # World synthesiser
+    python3 "$WORKSPACE_ROOT/ros2_ws/src/kinect2_slam/kinect2_slam/world_synthesiser_node.py" > /tmp/memory_synthesiser.log 2>&1 &
+    MEMORY_PID3=$!
+    echo "      World synthesiser PID: $MEMORY_PID3"
+    
+    # Named memory
+    python3 "$WORKSPACE_ROOT/ros2_ws/src/kinect2_slam/kinect2_slam/named_memory_node.py" > /tmp/memory_named.log 2>&1 &
+    MEMORY_PID4=$!
+    echo "      Named memory PID: $MEMORY_PID4"
+    
+    sleep 3
+    echo -e "${GREEN}      ✓ Memory system running (4 nodes)${NC}"
+
+# 5. Start CV Pipeline Server (Python) - use system python for NumPy 1.x compatibility
+echo ""
+echo -e "${BLUE}[5/7]${NC} Starting CV Pipeline server (Python)..."
+nohup python3 \
     "$WORKSPACE_ROOT/ros2_ws/src/cv_pipeline/python/sam2_server_v2.py" \
     > /tmp/cv_pipeline.log 2>&1 &
 CV_PIPELINE_PID=$!
@@ -171,21 +152,17 @@ echo -e "${GREEN}      ✓ CV Pipeline server running${NC}"
 
 # 6. Start RViz2
 echo ""
-echo -e "${BLUE}${RVIZ_STEP}${NC} Starting RViz2..."
+echo -e "${BLUE}[6/7]${NC} Starting RViz2..."
 rviz2 -d "$WORKSPACE_ROOT/rviz_configs/tsdf_rviz.rviz" > /tmp/rviz.log 2>&1 &
 RVIZ_PID=$!
 echo "      PID: $RVIZ_PID"
 sleep 3
 echo -e "${GREEN}      ✓ RViz2 running${NC}"
 
-# 7. Display system status
+# 8. Display system status
 echo ""
 echo -e "${CYAN}========================================${NC}"
-if [ "$ENABLE_RERUN" = true ]; then
-    echo -e "${GREEN}  🎉 System Running with Rerun!${NC}"
-else
-    echo -e "${GREEN}  🎉 System Running!${NC}"
-fi
+echo -e "${GREEN}  🎉 System Running!${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 echo -e "${YELLOW}Process IDs:${NC}"
@@ -193,9 +170,11 @@ echo "  Phase 2 (SLAM):      $PHASE2_PID"
 echo "  Phase 3 (TSDF):      $TSDF_PID"
 echo "  Phase 4 (Semantic):  $SEMANTIC_PID"
 echo "  CV Pipeline:         $CV_PIPELINE_PID"
-if [ "$ENABLE_RERUN" = true ]; then
-    echo "  Rerun Logger:        $RERUN_PID"
-fi
+echo "  Memory System:"
+echo "    - Checkpointer:    $MEMORY_PID1"
+echo "    - Analyser:        $MEMORY_PID2"
+echo "    - Synthesiser:     $MEMORY_PID3"
+echo "    - Named Memory:    $MEMORY_PID4"
 echo "  RViz2:               $RVIZ_PID"
 echo ""
 echo -e "${YELLOW}Logs:${NC}"
@@ -203,26 +182,29 @@ echo "  Phase 2:     /tmp/phase2.log"
 echo "  TSDF:        /tmp/tsdf.log"
 echo "  Semantic:    /tmp/semantic.log"
 echo "  CV Pipeline: /tmp/cv_pipeline.log"
-if [ "$ENABLE_RERUN" = true ]; then
-    echo "  Rerun:       /tmp/rerun.log"
-fi
+echo "  Memory:"
+echo "    - Checkpointer:  /tmp/memory_checkpointer.log"
+echo "    - Analyser:      /tmp/memory_analyser.log"
+echo "    - Synthesiser:   /tmp/memory_synthesiser.log"
+echo "    - Named Memory:  /tmp/memory_named.log"
 echo "  RViz:        /tmp/rviz.log"
 echo ""
 echo -e "${YELLOW}World State:${NC}"
 echo "  JSON file:   /tmp/world_state.json"
 echo "  ROS topic:   /semantic/world_state"
 echo ""
+echo -e "${YELLOW}Memory System:${NC}"
+echo "  Checkpoints:     /tmp/stm/"
+echo "  Named memories:  ~/howyouseeme_persistent/named_memories.json"
+echo "  Topics:"
+echo "    - /memory/checkpoint_saved"
+echo "    - /memory/checkpoint_enriched"
+echo "    - /memory/updated"
+echo ""
 echo -e "${YELLOW}RViz Displays:${NC}"
 echo "  • TSDF Point Cloud:  /tsdf/pointcloud"
 echo "  • Semantic Labels:   /semantic/markers"
 echo "  • TF Frames:         map → kinect2_rgb_optical_frame"
-if [ "$ENABLE_RERUN" = true ]; then
-    echo ""
-    echo -e "${YELLOW}Rerun Viewer:${NC}"
-    echo "  • Timeline scrubbing enabled"
-    echo "  • Recording to: $SESSION_FILE"
-    echo "  • All streams synced by timestamp"
-fi
 echo ""
 echo -e "${YELLOW}Useful Commands:${NC}"
 echo "  Export mesh:     ros2 service call /tsdf/export_mesh std_srvs/srv/Trigger"
@@ -232,16 +214,36 @@ echo ""
 echo -e "${CYAN}========================================${NC}"
 echo ""
 
-# 8. Launch CV Pipeline Menu
-echo -e "${BLUE}${STATUS_STEP}${NC} Opening CV Pipeline menu..."
+# 9. Launch CV Pipeline Menu in new terminal
+echo ""
+echo -e "${BLUE}[7/7]${NC} Opening CV Pipeline menu in new terminal..."
 echo ""
 echo -e "${YELLOW}Recommended: Start YOLO detection for semantic mapping${NC}"
 echo "  Select: 3) YOLO11 → 1) Detection → Stream mode"
 echo ""
-sleep 3
 
-# Run the menu in foreground
-"$SCRIPT_DIR/cv_pipeline_menu.sh"
+# Try to open in a new terminal
+if command -v gnome-terminal &> /dev/null; then
+    gnome-terminal -- bash -c "cd '$WORKSPACE_ROOT' && '$SCRIPT_DIR/cv_pipeline_menu.sh'; exec bash" &
+    echo -e "${GREEN}      ✓ CV Pipeline menu opened in new terminal${NC}"
+elif command -v xterm &> /dev/null; then
+    xterm -e "cd '$WORKSPACE_ROOT' && '$SCRIPT_DIR/cv_pipeline_menu.sh'; bash" &
+    echo -e "${GREEN}      ✓ CV Pipeline menu opened in new terminal${NC}"
+elif command -v konsole &> /dev/null; then
+    konsole -e bash -c "cd '$WORKSPACE_ROOT' && '$SCRIPT_DIR/cv_pipeline_menu.sh'; exec bash" &
+    echo -e "${GREEN}      ✓ CV Pipeline menu opened in new terminal${NC}"
+else
+    echo -e "${YELLOW}      ⚠ No terminal emulator found. Run manually:${NC}"
+    echo "        $SCRIPT_DIR/cv_pipeline_menu.sh"
+fi
 
-# When menu exits, cleanup
-cleanup
+echo ""
+echo -e "${CYAN}========================================${NC}"
+echo -e "${GREEN}  System is running!${NC}"
+echo -e "${CYAN}========================================${NC}"
+echo ""
+echo "Press Ctrl+C to stop all components"
+echo ""
+
+# Wait for all processes
+wait
