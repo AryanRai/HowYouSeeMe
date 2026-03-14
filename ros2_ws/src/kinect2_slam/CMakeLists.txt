@@ -59,71 +59,60 @@ link_directories(
 #   OpenCV
 # )
 
-# ORB-SLAM3 Node
-add_executable(orb_slam3_node
-  src/orb_slam3_node.cpp
-)
+# ORB-SLAM3 Node (disabled due to curl linking issues - use existing binary)
+# add_executable(orb_slam3_node
+#   src/orb_slam3_node.cpp
+# )
 
-# Add OpenGL definitions to fix Pangolin compatibility
-target_compile_definitions(orb_slam3_node PRIVATE
-  GL_GLEXT_PROTOTYPES
-  HAVE_GLEW
-)
+# target_compile_definitions(orb_slam3_node PRIVATE
+#   GL_GLEXT_PROTOTYPES
+#   HAVE_GLEW
+# )
 
-target_include_directories(orb_slam3_node PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-  /opt/ros/jazzy/include/cv_bridge
-  /opt/ros/jazzy/include
-)
+# target_include_directories(orb_slam3_node PUBLIC
+#   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+#   $<INSTALL_INTERFACE:include>
+#   /opt/ros/jazzy/include/cv_bridge
+#   /opt/ros/jazzy/include
+# )
 
-target_link_libraries(orb_slam3_node
-  ${ORB_SLAM3_ROOT_DIR}/lib/libORB_SLAM3.so
-  ${ORB_SLAM3_ROOT_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
-  ${ORB_SLAM3_ROOT_DIR}/Thirdparty/g2o/lib/libg2o.so
-  ${OpenCV_LIBS}
-  Eigen3::Eigen
-  GL
-  GLEW
-  /usr/local/lib/libpango_display.so
-  /usr/local/lib/libpango_windowing.so
-  /usr/local/lib/libpango_opengl.so
-  /usr/local/lib/libpango_core.so
-  -lpthread
-)
+# target_link_libraries(orb_slam3_node
+#   ${ORB_SLAM3_ROOT_DIR}/lib/libORB_SLAM3.so
+#   ${ORB_SLAM3_ROOT_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
+#   ${ORB_SLAM3_ROOT_DIR}/Thirdparty/g2o/lib/libg2o.so
+#   ${OpenCV_LIBS}
+#   Eigen3::Eigen
+#   GL
+#   GLEW
+#   /usr/local/lib/libpango_display.so
+#   /usr/local/lib/libpango_windowing.so
+#   /usr/local/lib/libpango_opengl.so
+#   /usr/local/lib/libpango_core.so
+#   -lpthread
+# )
 
-ament_target_dependencies(orb_slam3_node
-  rclcpp
-  sensor_msgs
-  geometry_msgs
-  cv_bridge
-  message_filters
-  tf2
-  tf2_ros
-  tf2_geometry_msgs
-)
+# ament_target_dependencies(orb_slam3_node
+#   rclcpp
+#   sensor_msgs
+#   geometry_msgs
+#   cv_bridge
+#   message_filters
+#   tf2
+#   tf2_ros
+#   tf2_geometry_msgs
+# )
 
 # Install Python modules
 ament_python_install_package(${PROJECT_NAME})
 
-# Install C++ executables
-install(TARGETS
-  orb_slam3_node
-  DESTINATION lib/${PROJECT_NAME}
-)
+# Install C++ executables (disabled - using existing binary)
+# install(TARGETS
+#   orb_slam3_node
+#   DESTINATION lib/${PROJECT_NAME}
+# )
 
-# Install Python scripts
-install(PROGRAMS
-  kinect2_slam/tsdf_integrator_node.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME tsdf_integrator
-)
-
-install(PROGRAMS
-  kinect2_slam/rerun_logger_node.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME rerun_logger
-)
+# Python scripts are installed via setup.py entry_points
+# No manual installation needed here
 
 install(DIRECTORY
   launch
