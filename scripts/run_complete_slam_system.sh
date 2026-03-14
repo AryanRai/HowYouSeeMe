@@ -39,8 +39,8 @@ echo ""
 cleanup() {
     echo ""
     echo -e "${YELLOW}Shutting down all components...${NC}"
-    kill $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $RERUN_PID $RVIZ_PID 2>/dev/null
-    wait $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $RERUN_PID $RVIZ_PID 2>/dev/null
+    kill $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $RERUN_VIEWER_PID $RERUN_PID $RVIZ_PID 2>/dev/null
+    wait $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $RERUN_VIEWER_PID $RERUN_PID $RVIZ_PID 2>/dev/null
     echo -e "${GREEN}All processes stopped${NC}"
     exit 0
 }
@@ -154,11 +154,22 @@ echo -e "${GREEN}      ✓ CV Pipeline server running${NC}"
 # 6. Start Rerun bridge (Python — live visualization)
 echo ""
 echo -e "${BLUE}[6/8]${NC} Starting Rerun live bridge..."
-python3 "$WORKSPACE_ROOT/ros2_ws/src/kinect2_slam/kinect2_slam/rerun_bridge_node.py" \
-    --ros-args \
-    -p rgb_downsample:=2 \
-    -p pc_max_points:=80000 \
-    -p recording_name:=howyouseeme > /tmp/rerun.log 2>&1 &
+
+# Start viewer first (listens for SDK connections on port 9876)
+rerun > /tmp/rerun_viewer.log 2>&1 &
+RERUN_VIEWER_PID=$!
+sleep 3
+
+bash -c "
+    export PATH=\$(echo \"\$PATH\" | tr ':' '\n' | grep -v conda | tr '\n' ':' | sed 's/:\$//')
+    export LD_LIBRARY_PATH=\$(echo \"\$LD_LIBRARY_PATH\" | tr ':' '\n' | grep -v conda | tr '\n' ':' | sed 's/:\$//')
+    export LD_LIBRARY_PATH=\"$WORKSPACE_ROOT/libfreenect2/freenect2/lib:/home/aryan/ORB_SLAM3/lib:\$LD_LIBRARY_PATH\"
+    unset CONDA_DEFAULT_ENV CONDA_PREFIX CONDA_PYTHON_EXE CONDA_SHLVL PYTHONPATH
+    source /opt/ros/jazzy/setup.bash
+    source '$WORKSPACE_ROOT/ros2_ws/install/setup.bash'
+    python3 '$WORKSPACE_ROOT/ros2_ws/src/kinect2_slam/kinect2_slam/rerun_bridge_node.py' --connect
+" > /tmp/rerun.log 2>&1 &
+RERUN_PID=$!
 RERUN_PID=$!
 echo "      PID: $RERUN_PID (logs: /tmp/rerun.log)"
 sleep 4
@@ -188,7 +199,7 @@ echo "  Phase 2 (SLAM):      $PHASE2_PID"
 echo "  Phase 3 (TSDF):      $TSDF_PID"
 echo "  Phase 4 (Semantic):  $SEMANTIC_PID"
 echo "  CV Pipeline:         $CV_PIPELINE_PID"
-echo "  Rerun Bridge:        $RERUN_PID"
+echo "  Rerun Bridge:        $RERUN_PID (viewer: $RERUN_VIEWER_PID)"
 echo "  Memory System:"
 echo "    - Checkpointer:    $MEMORY_PID1"
 echo "    - Analyser:        $MEMORY_PID2"
