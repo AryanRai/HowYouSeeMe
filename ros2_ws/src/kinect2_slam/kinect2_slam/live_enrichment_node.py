@@ -45,6 +45,20 @@ def _get_model(name: str):
             _models[name] = YOLO(paths[name])
         return _models[name]
 
+_insightface_worker = None
+_insightface_lock = threading.Lock()
+
+def _get_insightface():
+    global _insightface_worker
+    with _insightface_lock:
+        if _insightface_worker is None:
+            from insightface_worker import InsightFaceWorker
+            w = InsightFaceWorker(device='cuda')
+            w.load_models('buffalo_l')
+            w.prepare(det_size=(640, 640), det_thresh=0.3)
+            _insightface_worker = w
+        return _insightface_worker
+
 
 def _ros_image_to_numpy(msg: Image) -> np.ndarray:
     dtype_map = {
@@ -178,10 +192,7 @@ class LiveEnrichmentNode(Node):
             # ── InsightFace (face detect + recognize + emotion) ───────────────
             if has_person:
                 try:
-                    from insightface_worker import InsightFaceWorker
-                    worker = InsightFaceWorker(device='cuda')
-                    worker.load_models('buffalo_l')
-                    worker.prepare(det_size=(640, 640))
+                    worker = _get_insightface()
                     result = worker.process(rgb, {'mode': 'analyze'})
                     enriched['faces'] = result.get('faces', [])
                     self.get_logger().info(f'InsightFace: {len(enriched["faces"])} faces')

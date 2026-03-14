@@ -87,10 +87,17 @@ class HowYouSeeMeBridge(Node):
         self._last_depth_time = 0.0
         self._last_tsdf_time = 0.0
         self._last_pose_time = 0.0
-        self._rgb_interval = 0.5    # 2 Hz
-        self._depth_interval = 1.0  # 1 Hz
-        self._tsdf_interval = 5.0   # every 5s
-        self._pose_interval = 0.1   # 10 Hz
+        self._last_markers_time = 0.0
+        self._last_world_state_time = 0.0
+        self._rgb_interval = 0.5
+        self._depth_interval = 1.0
+        self._tsdf_interval = 5.0
+        self._pose_interval = 0.1
+        self._markers_interval = 1.0
+        self._world_state_interval = 3.0
+        self._MAX_TRAJ_PTS = 2000
+        self._latest_rgb: np.ndarray | None = None
+        self._latest_rgb_lock = threading.Lock()
 
         cbg = ReentrantCallbackGroup()
 
@@ -107,8 +114,17 @@ class HowYouSeeMeBridge(Node):
         sub('/semantic/markers',            MarkerArray,  self._markers_cb,     reliable)
         sub('/semantic/world_state',        String,       self._world_state_cb, reliable)
         sub('/cv_pipeline/results',         String,       self._cv_results_cb,  reliable)
+        sub('/cv_pipeline/enriched',        String,       self._enriched_cb,    reliable)
 
         self.get_logger().info('Rerun bridge subscribed to all topics')
+
+        # Log a static pinhole camera so 2D image entities have a proper ancestor
+        # (suppresses "2D visualizers require a pinhole ancestor" warnings)
+        rr.log('camera', rr.Pinhole(
+            focal_length=[1081.37 / 4, 1081.37 / 4],   # divided by 4x downsample
+            principal_point=[959.5 / 4, 539.5 / 4],
+            width=480, height=270,
+        ), static=True)
 
     # ── time helper ──────────────────────────────────────────────────────────
 
@@ -129,6 +145,8 @@ class HowYouSeeMeBridge(Node):
             self._set_time(msg.header.stamp)
             img = _ros_image_to_numpy(msg)
             img = img[::4, ::4]  # 4x downsample → 480x270
+            with self._latest_rgb_lock:
+                self._latest_rgb = img
             rr.log('camera/rgb', rr.Image(img))
         except Exception as e:
             self.get_logger().warn(f'RGB: {e}', throttle_duration_sec=5.0)
@@ -168,6 +186,9 @@ class HowYouSeeMeBridge(Node):
 
             with self._traj_lock:
                 self._trajectory.append([p.x, p.y, p.z])
+                # Cap to prevent unbounded memory growth
+                if len(self._trajectory) > self._MAX_TRAJ_PTS:
+                    self._trajectory = self._trajectory[-self._MAX_TRAJ_PTS:]
                 pts = np.array(self._trajectory, dtype=np.float32)
 
             rr.log('world/trajectory', rr.LineStrips3D([pts],
@@ -208,6 +229,11 @@ class HowYouSeeMeBridge(Node):
     # ── Semantic markers ──────────────────────────────────────────────────────
 
     def _markers_cb(self, msg: MarkerArray) -> None:
+        import time
+        now = time.monotonic()
+        if now - self._last_markers_time < self._markers_interval:
+            return
+        self._last_markers_time = now
         try:
             rr.set_time('ros_time', timestamp=np.datetime64(
                 self.get_clock().now().nanoseconds, 'ns'))
@@ -228,6 +254,11 @@ class HowYouSeeMeBridge(Node):
     # ── World state ───────────────────────────────────────────────────────────
 
     def _world_state_cb(self, msg: String) -> None:
+        import time
+        now = time.monotonic()
+        if now - self._last_world_state_time < self._world_state_interval:
+            return
+        self._last_world_state_time = now
         try:
             import json
             data = json.loads(msg.data)
@@ -248,31 +279,183 @@ class HowYouSeeMeBridge(Node):
                     if not pos or len(pos) < 3:
                         continue
                     pts.append(pos[:3])
-                    cols.append(list(_color_for(obj.get('source', ''))))
+                    is_person = obj.get('label') == 'person'
+                    cols.append([0, 255, 80] if is_person else list(_color_for(obj.get('label', ''))))
                     conf = obj.get('confidence', 0.0)
                     count = obj.get('count', obj.get('times_seen', 1))
-                    lbls.append(f"{obj.get('label', obj_id)} ({conf:.2f}) ×{count}")
+                    face_name = obj.get('face_name')
+                    if is_person and face_name and face_name != 'unknown':
+                        sim = obj.get('face_similarity', 0.0)
+                        lbls.append(f"👤 {face_name} ({sim:.0%}) ×{count}")
+                    else:
+                        lbls.append(f"{obj.get('label', obj_id)} ({conf:.2f}) ×{count}")
                 if pts:
                     rr.log('world/objects', rr.Points3D(
                         np.array(pts, dtype=np.float32),
                         colors=np.array(cols, dtype=np.uint8),
                         labels=lbls, radii=0.07))
 
-            rr.log('metrics/object_count', rr.Scalars(float(len(data.get('objects', {})))))
-            rr.log('metrics/people_count', rr.Scalars(float(len(data.get('people', {})))))
+            rr.log('metrics/object_count', rr.Scalar(float(len(data.get('objects', {})))))
+            rr.log('metrics/people_count', rr.Scalar(float(len(data.get('people', {})))))
         except Exception as e:
             self.get_logger().warn(f'WorldState: {e}', throttle_duration_sec=5.0)
 
-    # ── CV results ────────────────────────────────────────────────────────────
+    # ── Enriched results (faces, pose, seg) ──────────────────────────────────
+
+    def _enriched_cb(self, msg: String) -> None:
+        try:
+            import json, cv2
+            data = json.loads(msg.data)
+            if 'error' in data:
+                return
+
+            rr.set_time('ros_time', timestamp=np.datetime64(
+                self.get_clock().now().nanoseconds, 'ns'))
+
+            faces = data.get('faces', [])
+            pose_list = data.get('pose', [])
+            seg_list = data.get('segmentation', [])
+            scale = 0.25  # HD (1920x1080) → 480x270 (same as rgb display)
+
+            # ── Face boxes + name labels on image overlay ─────────────────
+            if faces:
+                boxes, labels, colors = [], [], []
+                for f in faces:
+                    bbox = f.get('bbox', [])
+                    if len(bbox) != 4:
+                        continue
+                    x1, y1, x2, y2 = [v * scale for v in bbox]
+                    boxes.append([x1, y1, x2 - x1, y2 - y1])  # xywh
+                    name = f.get('name', 'unknown')
+                    sim  = f.get('similarity', 0.0)
+                    age  = f.get('age', '?')
+                    gender = f.get('gender', '?')
+                    recog = f.get('recognized', False)
+                    label = f'{name} ({sim:.0%})' if recog else f'unknown age={age} {gender}'
+                    labels.append(label)
+                    colors.append([0, 255, 0] if recog else [255, 100, 0])
+
+                rr.log('camera/rgb/faces', rr.Boxes2D(
+                    array=np.array(boxes, dtype=np.float32),
+                    array_format=rr.Box2DFormat.XYWH,
+                    labels=labels,
+                    colors=np.array(colors, dtype=np.uint8),
+                ))
+                rr.log('metrics/faces_detected', rr.Scalar(float(len(faces))))
+
+            # ── Pose keypoints + skeleton lines ───────────────────────────
+            if pose_list:
+                # COCO 17-keypoint skeleton pairs
+                SKELETON = [
+                    (5,6),(5,7),(7,9),(6,8),(8,10),   # arms
+                    (5,11),(6,12),(11,12),              # torso
+                    (11,13),(13,15),(12,14),(14,16),    # legs
+                    (0,1),(0,2),(1,3),(2,4),            # head
+                ]
+                all_strips = []
+                all_kpt_pts = []
+                for person in pose_list:
+                    kpts = np.array(person.get('keypoints', []), dtype=np.float32)
+                    if kpts.shape[0] < 17:
+                        continue
+                    # kpts: [17, 3] — x, y, conf (in original HD coords)
+                    for a, b in SKELETON:
+                        if kpts[a, 2] > 0.3 and kpts[b, 2] > 0.3:
+                            all_strips.append([
+                                [kpts[a, 0] * scale, kpts[a, 1] * scale],
+                                [kpts[b, 0] * scale, kpts[b, 1] * scale],
+                            ])
+                    # Keypoint dots
+                    for kp in kpts:
+                        if kp[2] > 0.3:
+                            all_kpt_pts.append([kp[0] * scale, kp[1] * scale])
+                if all_strips:
+                    rr.log('camera/rgb/pose', rr.LineStrips2D(
+                        all_strips,
+                        colors=[255, 128, 0],
+                        radii=1.5,
+                    ))
+                if all_kpt_pts:
+                    rr.log('camera/rgb/pose_keypoints', rr.Points2D(
+                        np.array(all_kpt_pts, dtype=np.float32),
+                        colors=[255, 200, 0],
+                        radii=3.0,
+                    ))
+                rr.log('metrics/pose_persons', rr.Scalar(float(len(pose_list))))
+
+            # ── Segmentation boxes ────────────────────────────────────────
+            if seg_list:
+                boxes, labels, colors = [], [], []
+                for s in seg_list:
+                    bbox = s.get('bbox', [])
+                    if len(bbox) != 4:
+                        continue
+                    x1, y1, x2, y2 = [v * scale for v in bbox]
+                    boxes.append([x1, y1, x2 - x1, y2 - y1])
+                    labels.append(f"{s['label']} {s['conf']:.0%}")
+                    colors.append([0, 200, 255])
+                rr.log('camera/rgb/segmentation', rr.Boxes2D(
+                    array=np.array(boxes, dtype=np.float32),
+                    array_format=rr.Box2DFormat.XYWH,
+                    labels=labels,
+                    colors=np.array(colors, dtype=np.uint8),
+                ))
+
+            # ── Emotion (from faces) ──────────────────────────────────────
+            for f in faces:
+                emotion = f.get('emotion') or f.get('dominant_emotion')
+                if emotion:
+                    score = f.get('emotion_score', f.get('emotion_confidence', 0.0))
+                    name  = f.get('name', 'unknown')
+                    rr.log('metrics/emotion', rr.TextLog(
+                        f'{name}: {emotion} ({score:.0%})' if score else f'{name}: {emotion}'
+                    ))
+
+        except Exception as e:
+            self.get_logger().warn(f'Enriched: {e}', throttle_duration_sec=5.0)
+
+    # ── CV results (YOLO detection boxes on image) ───────────────────────────
 
     def _cv_results_cb(self, msg: String) -> None:
         try:
             import json
             data = json.loads(msg.data)
+            if 'error' in data:
+                return
             rr.set_time('ros_time', timestamp=np.datetime64(
                 self.get_clock().now().nanoseconds, 'ns'))
-            n = len(data.get('detections', data.get('faces', data.get('mask_stats', []))))
-            rr.log('metrics/detections_per_frame', rr.Scalars(float(n)))
+
+            detections = data.get('detections', [])
+            scale = 0.25  # QHD 960x540 → 240x135, but YOLO runs on QHD so scale to display
+
+            if detections:
+                boxes, labels, colors = [], [], []
+                for d in detections:
+                    bbox = d.get('bbox', [])
+                    if len(bbox) != 4:
+                        continue
+                    x1, y1, x2, y2 = [v * scale for v in bbox]
+                    boxes.append([x1, y1, x2 - x1, y2 - y1])
+                    label = d.get('label', d.get('class_name', '?'))
+                    conf  = d.get('confidence', 0.0)
+                    labels.append(f'{label} {conf:.0%}')
+                    colors.append(list(_color_for(label)))
+                if boxes:
+                    rr.log('camera/rgb/detections', rr.Boxes2D(
+                        array=np.array(boxes, dtype=np.float32),
+                        array_format=rr.Box2DFormat.XYWH,
+                        labels=labels,
+                        colors=np.array(colors, dtype=np.uint8),
+                    ))
+
+            # Emotion results (from insightface:mode=emotion)
+            emotion_data = data.get('emotion', {})
+            if emotion_data and 'dominant_emotion' in emotion_data:
+                emo   = emotion_data['dominant_emotion']
+                score = emotion_data.get('emotion_scores', {}).get(emo, 0.0)
+                rr.log('metrics/emotion', rr.TextLog(f'{emo} ({score:.0%})'))
+
+            rr.log('metrics/detections_per_frame', rr.Scalar(float(len(detections))))
         except Exception as e:
             self.get_logger().warn(f'CV: {e}', throttle_duration_sec=5.0)
 

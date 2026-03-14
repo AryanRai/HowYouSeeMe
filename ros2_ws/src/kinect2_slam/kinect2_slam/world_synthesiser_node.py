@@ -110,6 +110,31 @@ class WorldSynthesiserNode(Node):
 
             if enriched_dets:
                 self.current_detections = enriched_dets
+
+            # Propagate face names into people_db immediately
+            if faces:
+                for person_id, person in self.people_db.items():
+                    if not faces:
+                        break
+                    best = max(faces, key=lambda f: f.get('similarity', 0.0))
+                    if best.get('recognized') and best.get('name'):
+                        person['face_name'] = best['name']
+                        person['face_similarity'] = best.get('similarity', 0.0)
+                        person['age'] = best.get('age')
+                        person['gender'] = best.get('gender')
+                        # Store emotion if present
+                        emo = best.get('emotion') or best.get('dominant_emotion')
+                        if emo:
+                            person['emotion'] = emo
+                            person['emotion_score'] = best.get('emotion_score', 0.0)
+
+            # Store seg areas on matching objects
+            for seg in seg_data:
+                label = seg.get('label')
+                for obj in self.objects_db.values():
+                    if obj.get('label') == label:
+                        obj['seg_area_px'] = seg.get('area', 0)
+                        break
         except json.JSONDecodeError:
             pass
     
@@ -274,29 +299,171 @@ class WorldSynthesiserNode(Node):
         return {}
     
     def publish_markers(self, world_state):
-        """Publish RViz markers for objects"""
+        """Publish RViz markers for objects and people"""
         marker_array = MarkerArray()
         marker_id = 0
-        
+
+        # Objects — sphere + white text
         for obj_id, obj in world_state['objects'].items():
+            pos = obj.get('position', [])
+            if len(pos) < 3:
+                continue
+
+            # Small sphere
+            sphere = Marker()
+            sphere.header.frame_id = 'map'
+            sphere.header.stamp = self.get_clock().now().to_msg()
+            sphere.id = marker_id
+            sphere.type = Marker.SPHERE
+            sphere.action = Marker.ADD
+            sphere.pose.position.x = pos[0]
+            sphere.pose.position.y = pos[1]
+            sphere.pose.position.z = pos[2]
+            sphere.scale.x = sphere.scale.y = sphere.scale.z = 0.12
+            sphere.color.r = 1.0
+            sphere.color.g = 0.85
+            sphere.color.b = 0.2
+            sphere.color.a = 0.7
+            sphere.lifetime.sec = 5
+            marker_array.markers.append(sphere)
+            marker_id += 1
+
+            # Text label
             marker = Marker()
             marker.header.frame_id = 'map'
             marker.header.stamp = self.get_clock().now().to_msg()
             marker.id = marker_id
             marker.type = Marker.TEXT_VIEW_FACING
             marker.action = Marker.ADD
-            marker.pose.position.x = obj['position'][0]
-            marker.pose.position.y = obj['position'][1]
-            marker.pose.position.z = obj['position'][2] + 0.1
-            marker.scale.z = 0.1
+            marker.pose.position.x = pos[0]
+            marker.pose.position.y = pos[1]
+            marker.pose.position.z = pos[2] + 0.15
+            marker.scale.z = 0.12
             marker.color.r = 1.0
             marker.color.g = 1.0
             marker.color.b = 1.0
             marker.color.a = 1.0
             marker.text = f"{obj['label']} ({obj['confidence']:.2f})"
+            marker.lifetime.sec = 5
             marker_array.markers.append(marker)
             marker_id += 1
-        
+
+        # People — green sphere + name label
+        for person_id, person in world_state.get('people', {}).items():
+            pos = person.get('position', [])
+            if len(pos) < 3:
+                continue
+
+            # Sphere at person position
+            sphere = Marker()
+            sphere.header.frame_id = 'map'
+            sphere.header.stamp = self.get_clock().now().to_msg()
+            sphere.id = marker_id
+            sphere.type = Marker.SPHERE
+            sphere.action = Marker.ADD
+            sphere.pose.position.x = pos[0]
+            sphere.pose.position.y = pos[1]
+            sphere.pose.position.z = pos[2]
+            sphere.scale.x = sphere.scale.y = sphere.scale.z = 0.2
+            sphere.color.r = 0.0
+            sphere.color.g = 1.0
+            sphere.color.b = 0.3
+            sphere.color.a = 0.8
+            sphere.lifetime.sec = 5
+            marker_array.markers.append(sphere)
+            marker_id += 1
+
+            # Name label above sphere
+            name_marker = Marker()
+            name_marker.header.frame_id = 'map'
+            name_marker.header.stamp = self.get_clock().now().to_msg()
+            name_marker.id = marker_id
+            name_marker.type = Marker.TEXT_VIEW_FACING
+            name_marker.action = Marker.ADD
+            name_marker.pose.position.x = pos[0]
+            name_marker.pose.position.y = pos[1]
+            name_marker.pose.position.z = pos[2] + 0.35
+            name_marker.scale.z = 0.15
+            name_marker.color.r = 0.0
+            name_marker.color.g = 1.0
+            name_marker.color.b = 0.5
+            name_marker.color.a = 1.0
+            name_marker.lifetime.sec = 5
+
+            # Use face name if available
+            face_name = person.get('face_name')
+            conf = person.get('confidence', 0.0)
+            if face_name and face_name != 'unknown':
+                sim = person.get('face_similarity', 0.0)
+                name_marker.text = f"👤 {face_name} ({sim:.0%})"
+            else:
+                name_marker.text = f"person ({conf:.0%})"
+            marker_array.markers.append(name_marker)
+            marker_id += 1
+
+            # Emotion label if available
+            emotion = person.get('emotion')
+            if emotion:
+                emo_marker = Marker()
+                emo_marker.header.frame_id = 'map'
+                emo_marker.header.stamp = self.get_clock().now().to_msg()
+                emo_marker.id = marker_id
+                emo_marker.type = Marker.TEXT_VIEW_FACING
+                emo_marker.action = Marker.ADD
+                emo_marker.pose.position.x = pos[0]
+                emo_marker.pose.position.y = pos[1]
+                emo_marker.pose.position.z = pos[2] + 0.55
+                emo_marker.scale.z = 0.12
+                emo_marker.color.r = 1.0
+                emo_marker.color.g = 0.8
+                emo_marker.color.b = 0.0
+                emo_marker.color.a = 1.0
+                emo_marker.lifetime.sec = 5
+                score = person.get('emotion_score', 0.0)
+                emo_marker.text = f'{emotion} ({score:.0%})' if score else emotion
+                marker_array.markers.append(emo_marker)
+                marker_id += 1
+
+            # Pose skeleton as LINE_LIST if keypoints available
+            kpts_raw = person.get('keypoints')
+            if kpts_raw:
+                from geometry_msgs.msg import Point
+                SKELETON = [
+                    (5,6),(5,7),(7,9),(6,8),(8,10),
+                    (5,11),(6,12),(11,12),
+                    (11,13),(13,15),(12,14),(14,16),
+                    (0,1),(0,2),(1,3),(2,4),
+                ]
+                kpts = np.array(kpts_raw, dtype=np.float32)
+                if kpts.shape[0] >= 17:
+                    skel = Marker()
+                    skel.header.frame_id = 'map'
+                    skel.header.stamp = self.get_clock().now().to_msg()
+                    skel.id = marker_id
+                    skel.type = Marker.LINE_LIST
+                    skel.action = Marker.ADD
+                    skel.scale.x = 0.02
+                    skel.color.r = 1.0
+                    skel.color.g = 0.5
+                    skel.color.b = 0.0
+                    skel.color.a = 0.9
+                    skel.lifetime.sec = 5
+                    # Project keypoints to 3D using person depth
+                    depth_m = person.get('depth_m', pos[2])
+                    fx, fy = self.fx, self.fy
+                    cx, cy = self.cx, self.cy
+                    for a, b in SKELETON:
+                        if kpts[a, 2] > 0.3 and kpts[b, 2] > 0.3:
+                            for idx in (a, b):
+                                px = Point()
+                                px.x = (kpts[idx, 0] - cx) * depth_m / fx
+                                px.y = (kpts[idx, 1] - cy) * depth_m / fy
+                                px.z = depth_m
+                                skel.points.append(px)
+                    if skel.points:
+                        marker_array.markers.append(skel)
+                        marker_id += 1
+
         self.markers_pub.publish(marker_array)
 
 def main(args=None):
