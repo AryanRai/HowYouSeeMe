@@ -2,33 +2,9 @@
   "person_000": {
     "name": "aryan",
     "first_seen": "2025-11-23 02:00:38",
-    "encounter_count": 112,
-    "samples": 1,
-    "last_updated": "2025-11-23 02:00:38",
-    "last_seen": "2025-11-23 02:02:41"
-  },
-  "person_001": {
-    "name": "aryan",
-    "first_seen": "2026-03-14 04:14:42",
-    "encounter_count": 194,
-    "samples": 1,
-    "last_updated": "2026-03-14 04:14:42",
-    "last_seen": "2026-03-15 02:37:21"
-  },
-  "person_002": {
-    "name": "aryan",
-    "first_seen": "2026-03-15 02:18:32",
-    "encounter_count": 926,
-    "samples": 1,
-    "last_updated": "2026-03-15 02:18:32",
-    "last_seen": "2026-03-15 02:47:20"
-  },
-  "person_003": {
-    "name": "aryan",
-    "first_seen": "2026-03-15 03:11:03",
-    "encounter_count": 1451,
-    "samples": 1,
+    "encounter_count": 362,
+    "samples": 4,
     "last_updated": "2026-03-15 03:11:03",
-    "last_seen": "2026-03-15 04:01:18"
+    "last_seen": "2026-03-15 04:16:39"
   }
 }
