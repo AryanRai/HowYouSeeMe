@@ -29,7 +29,7 @@ echo ""
 echo -e "${YELLOW}After startup, CV Pipeline menu will open${NC}"
 echo -e "${YELLOW}Use YOLO detection for semantic mapping${NC}"
 echo ""
-echo -e "${YELLOW}Note: Rerun C++ disabled (Arrow version mismatch)${NC}"
+echo -e "${YELLOW}Note: Rerun C++ disabled — using Python Rerun bridge instead${NC}"
 echo ""
 echo "Press Ctrl+C to stop all components"
 echo -e "${CYAN}========================================${NC}"
@@ -39,8 +39,8 @@ echo ""
 cleanup() {
     echo ""
     echo -e "${YELLOW}Shutting down all components...${NC}"
-    kill $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $RVIZ_PID 2>/dev/null
-    wait $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $RVIZ_PID 2>/dev/null
+    kill $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $RERUN_PID $RVIZ_PID 2>/dev/null
+    wait $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $RERUN_PID $RVIZ_PID 2>/dev/null
     echo -e "${GREEN}All processes stopped${NC}"
     exit 0
 }
@@ -51,6 +51,7 @@ trap cleanup SIGINT SIGTERM
 export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v conda | tr '\n' ':' | sed 's/:$//')
 source /opt/ros/jazzy/setup.bash
 source "$WORKSPACE_ROOT/ros2_ws/install/setup.bash"
+export LD_LIBRARY_PATH="$WORKSPACE_ROOT/libfreenect2/freenect2/lib:/home/aryan/ORB_SLAM3/lib:$LD_LIBRARY_PATH"
 
 # 1. Start Phase 2 (Kinect + ORB-SLAM3)
 echo -e "${BLUE}[1/6]${NC} Starting Kinect + ORB-SLAM3..."
@@ -150,9 +151,26 @@ echo "      PID: $CV_PIPELINE_PID (logs: /tmp/cv_pipeline.log)"
 sleep 5
 echo -e "${GREEN}      ✓ CV Pipeline server running${NC}"
 
-# 6. Start RViz2
+# 6. Start Rerun bridge (Python — live visualization)
 echo ""
-echo -e "${BLUE}[6/7]${NC} Starting RViz2..."
+echo -e "${BLUE}[6/8]${NC} Starting Rerun live bridge..."
+python3 "$WORKSPACE_ROOT/ros2_ws/src/kinect2_slam/kinect2_slam/rerun_bridge_node.py" \
+    --ros-args \
+    -p rgb_downsample:=2 \
+    -p pc_max_points:=80000 \
+    -p recording_name:=howyouseeme > /tmp/rerun.log 2>&1 &
+RERUN_PID=$!
+echo "      PID: $RERUN_PID (logs: /tmp/rerun.log)"
+sleep 4
+if ! kill -0 $RERUN_PID 2>/dev/null; then
+    echo -e "${RED}      ❌ Rerun bridge failed. Check /tmp/rerun.log${NC}"
+else
+    echo -e "${GREEN}      ✓ Rerun viewer open + streaming${NC}"
+fi
+
+# 7. Start RViz2
+echo ""
+echo -e "${BLUE}[7/8]${NC} Starting RViz2..."
 rviz2 -d "$WORKSPACE_ROOT/rviz_configs/tsdf_rviz.rviz" > /tmp/rviz.log 2>&1 &
 RVIZ_PID=$!
 echo "      PID: $RVIZ_PID"
@@ -170,6 +188,7 @@ echo "  Phase 2 (SLAM):      $PHASE2_PID"
 echo "  Phase 3 (TSDF):      $TSDF_PID"
 echo "  Phase 4 (Semantic):  $SEMANTIC_PID"
 echo "  CV Pipeline:         $CV_PIPELINE_PID"
+echo "  Rerun Bridge:        $RERUN_PID"
 echo "  Memory System:"
 echo "    - Checkpointer:    $MEMORY_PID1"
 echo "    - Analyser:        $MEMORY_PID2"
@@ -182,6 +201,7 @@ echo "  Phase 2:     /tmp/phase2.log"
 echo "  TSDF:        /tmp/tsdf.log"
 echo "  Semantic:    /tmp/semantic.log"
 echo "  CV Pipeline: /tmp/cv_pipeline.log"
+echo "  Rerun:       /tmp/rerun.log  (recording: /tmp/howyouseeme_live.rrd)"
 echo "  Memory:"
 echo "    - Checkpointer:  /tmp/memory_checkpointer.log"
 echo "    - Analyser:      /tmp/memory_analyser.log"

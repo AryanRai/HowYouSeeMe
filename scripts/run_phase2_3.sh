@@ -17,8 +17,8 @@ if [ -n "$CONDA_DEFAULT_ENV" ]; then
     unset CONDA_SHLVL
 fi
 
-# Set library path for libfreenect2
-export LD_LIBRARY_PATH="$WORKSPACE_ROOT/libfreenect2/freenect2/lib:$LD_LIBRARY_PATH"
+# Set library path for libfreenect2 and ORB-SLAM3
+export LD_LIBRARY_PATH="$WORKSPACE_ROOT/libfreenect2/freenect2/lib:/home/aryan/ORB_SLAM3/lib:$LD_LIBRARY_PATH"
 
 # Source ROS
 source /opt/ros/jazzy/setup.bash
