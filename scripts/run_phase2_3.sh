@@ -180,6 +180,30 @@ ros2 run kinect2_slam orb_slam3_node --ros-args \
 ORB_SLAM3_PID=$!
 echo "    PID: $ORB_SLAM3_PID"
 sleep 2
+
+# Corrective static TFs for Kinect2 optical frame alignment
+# Problem: kinect2_bridge publishes kinect2_link→kinect2_rgb_optical_frame as identity,
+#          but optical frame (Z-forward, Y-down) ≠ ROS body frame (X-forward, Z-up).
+#          This causes depth/detections to appear "in the sky" in RViz/Rerun.
+#
+# Fix 1: camera_pose (ORB-SLAM3, ROS body convention) → kinect2_link (identity — same point)
+# Fix 2: kinect2_link → kinect2_rgb_optical_frame with proper optical rotation
+#         Rotation: -90° around X then -90° around Z = quaternion (-0.5, 0.5, -0.5, 0.5) xyzw
+#         static_transform_publisher args: x y z qx qy qz qw parent child
+echo "    Publishing corrective TFs for Kinect2 optical frame alignment..."
+ros2 run tf2_ros static_transform_publisher \
+    --ros-args -p translation.x:=0.0 -p translation.y:=0.0 -p translation.z:=0.0 \
+    -p rotation.x:=0.0 -p rotation.y:=0.0 -p rotation.z:=0.0 -p rotation.w:=1.0 \
+    -p frame_id:=camera_pose -p child_frame_id:=kinect2_link &
+TF_BODY_PID=$!
+
+ros2 run tf2_ros static_transform_publisher \
+    --ros-args -p translation.x:=0.0 -p translation.y:=0.0 -p translation.z:=0.0 \
+    -p rotation.x:=-0.5 -p rotation.y:=0.5 -p rotation.z:=-0.5 -p rotation.w:=0.5 \
+    -p frame_id:=kinect2_link -p child_frame_id:=kinect2_rgb_optical_frame &
+TF_OPT_PID=$!
+echo "    TF body→link PID: $TF_BODY_PID  |  TF link→optical PID: $TF_OPT_PID"
+sleep 1
 echo ""
 
 # 4. Start TSDF integrator (requires Open3D)
@@ -214,6 +238,8 @@ if [ "$BLUELILY_ENABLED" = true ]; then
 fi
 echo "  Kinect Bridge:     $KINECT_PID"
 echo "  ORB-SLAM3:         $ORB_SLAM3_PID"
+echo "  TF body→link:      $TF_BODY_PID"
+echo "  TF link→optical:   $TF_OPT_PID"
 if [ -n "$TSDF_PID" ]; then
     echo "  TSDF Integrator:   $TSDF_PID"
 fi
