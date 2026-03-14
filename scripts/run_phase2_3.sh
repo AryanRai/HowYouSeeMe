@@ -181,16 +181,11 @@ ORB_SLAM3_PID=$!
 echo "    PID: $ORB_SLAM3_PID"
 sleep 2
 
-# Corrective static TFs for Kinect2 optical frame alignment
-# Problem: kinect2_bridge publishes kinect2_link→kinect2_rgb_optical_frame as identity,
-#          but optical frame (Z-forward, Y-down) ≠ ROS body frame (X-forward, Z-up).
-#          This causes depth/detections to appear "in the sky" in RViz/Rerun.
-#
-# Fix 1: camera_pose (ORB-SLAM3, ROS body convention) → kinect2_link (identity — same point)
-# Fix 2: kinect2_link → kinect2_rgb_optical_frame with proper optical rotation
-#         Rotation: -90° around X then -90° around Z = quaternion (-0.5, 0.5, -0.5, 0.5) xyzw
-#         static_transform_publisher args: x y z qx qy qz qw parent child
-echo "    Publishing corrective TFs for Kinect2 optical frame alignment..."
+# Static TFs for Kinect2 frame chain.
+# ORB-SLAM3 outputs poses in OpenCV/optical convention (Z-forward, Y-down, X-right).
+# Both kinect2_link and kinect2_rgb_optical_frame are treated as the same optical frame,
+# so all transforms in this chain are identity.
+echo "    Publishing static TFs for Kinect2 frame chain (identity — optical convention)..."
 ros2 run tf2_ros static_transform_publisher \
     --ros-args -p translation.x:=0.0 -p translation.y:=0.0 -p translation.z:=0.0 \
     -p rotation.x:=0.0 -p rotation.y:=0.0 -p rotation.z:=0.0 -p rotation.w:=1.0 \
@@ -199,7 +194,7 @@ TF_BODY_PID=$!
 
 ros2 run tf2_ros static_transform_publisher \
     --ros-args -p translation.x:=0.0 -p translation.y:=0.0 -p translation.z:=0.0 \
-    -p rotation.x:=-0.5 -p rotation.y:=0.5 -p rotation.z:=-0.5 -p rotation.w:=0.5 \
+    -p rotation.x:=0.0 -p rotation.y:=0.0 -p rotation.z:=0.0 -p rotation.w:=1.0 \
     -p frame_id:=kinect2_link -p child_frame_id:=kinect2_rgb_optical_frame &
 TF_OPT_PID=$!
 echo "    TF body→link PID: $TF_BODY_PID  |  TF link→optical PID: $TF_OPT_PID"

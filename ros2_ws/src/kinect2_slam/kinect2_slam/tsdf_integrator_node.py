@@ -109,7 +109,8 @@ class TSDFIntegrator(Node):
             rgb = self.bridge.imgmsg_to_cv2(rgb_msg, 'rgb8')
             depth = self.bridge.imgmsg_to_cv2(depth_msg, '16UC1')
             
-            # Get camera pose
+            # ORB-SLAM3 outputs poses in OpenCV/optical convention (X right, Y down, Z forward).
+            # Open3D TSDF also expects optical convention — no rotation needed.
             T = self.pose_to_matrix(pose_msg)
             
             # Convert to Open3D format

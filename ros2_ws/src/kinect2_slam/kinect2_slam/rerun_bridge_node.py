@@ -120,7 +120,7 @@ class HowYouSeeMeBridge(Node):
 
         # Log a static pinhole camera so 2D image entities have a proper ancestor
         # (suppresses "2D visualizers require a pinhole ancestor" warnings)
-        rr.log('camera', rr.Pinhole(
+        rr.log('world/camera', rr.Pinhole(
             focal_length=[1081.37 / 4, 1081.37 / 4],   # divided by 4x downsample
             principal_point=[959.5 / 4, 539.5 / 4],
             width=480, height=270,
@@ -147,7 +147,7 @@ class HowYouSeeMeBridge(Node):
             img = img[::4, ::4]  # 4x downsample → 480x270
             with self._latest_rgb_lock:
                 self._latest_rgb = img
-            rr.log('camera/rgb', rr.Image(img))
+            rr.log('world/camera/rgb', rr.Image(img))
         except Exception as e:
             self.get_logger().warn(f'RGB: {e}', throttle_duration_sec=5.0)
 
@@ -163,7 +163,7 @@ class HowYouSeeMeBridge(Node):
             self._set_time(msg.header.stamp)
             depth = _ros_image_to_numpy(msg)
             depth = depth[::4, ::4]
-            rr.log('camera/depth', rr.DepthImage(depth, meter=1000.0))
+            rr.log('world/camera/depth', rr.DepthImage(depth, meter=1000.0))
         except Exception as e:
             self.get_logger().warn(f'Depth: {e}', throttle_duration_sec=5.0)
 
@@ -178,6 +178,12 @@ class HowYouSeeMeBridge(Node):
         try:
             self._set_time(msg.header.stamp)
             p, q = msg.pose.position, msg.pose.orientation
+
+            # Update camera transform so depth/RGB project into world correctly
+            rr.log('world/camera', rr.Transform3D(
+                translation=[p.x, p.y, p.z],
+                quaternion=rr.Quaternion(xyzw=[q.x, q.y, q.z, q.w]),
+            ))
 
             rr.log('world/camera_pose', rr.Transform3D(
                 translation=[p.x, p.y, p.z],
