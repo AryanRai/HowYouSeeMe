@@ -15,8 +15,7 @@ import json
 import time
 from pathlib import Path
 import numpy as np
-from tf2_ros import Buffer, TransformListener
-import tf2_geometry_msgs
+# tf2_ros intentionally not imported — conda libstdc++ conflict causes segfault
 
 class WorldSynthesiserNode(Node):
     def __init__(self):
@@ -45,13 +44,11 @@ class WorldSynthesiserNode(Node):
         self.current_pose = None
         self.current_detections = []
         self.current_depth = None
+        self.current_faces = []
+        self.current_seg   = []
         self.bridge = CvBridge()
         self.objects_db = {}  # object_id -> object_data
         self.people_db = {}
-        
-        # TF2
-        self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
         
         qos_reliable = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
         qos_be = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
@@ -59,6 +56,7 @@ class WorldSynthesiserNode(Node):
         # Subscribers
         self.pose_sub = self.create_subscription(PoseStamped, '/orb_slam3/pose', self.pose_callback, qos_be)
         self.detection_sub = self.create_subscription(String, '/cv_pipeline/results', self.detection_callback, qos_reliable)
+        self.enriched_sub  = self.create_subscription(String, '/cv_pipeline/enriched', self.enriched_callback, qos_reliable)
         self.depth_sub = self.create_subscription(Image, '/kinect2/hd/image_depth_rect', self.depth_callback, qos_be)
         
         # Publishers
@@ -84,6 +82,34 @@ class WorldSynthesiserNode(Node):
                 if 'label' not in d:
                     d['label'] = d.get('class_name', d.get('label', 'unknown'))
             self.current_detections = dets
+        except json.JSONDecodeError:
+            pass
+
+    def enriched_callback(self, msg):
+        """Cache enriched results (pose, seg, faces) from live enrichment node"""
+        try:
+            data = json.loads(msg.data)
+            if 'error' in data:
+                return
+            # Merge enriched detections into current_detections with extra fields
+            enriched_dets = data.get('detections', [])
+            pose_data     = {i: p for i, p in enumerate(data.get('pose', []))}
+            seg_data      = data.get('segmentation', [])
+            faces         = data.get('faces', [])
+
+            # Attach pose keypoints to person detections
+            person_idx = 0
+            for d in enriched_dets:
+                if d.get('label') == 'person' and person_idx in pose_data:
+                    d['keypoints'] = pose_data[person_idx]['keypoints']
+                    person_idx += 1
+
+            # Store faces separately for people_db
+            self.current_faces = faces
+            self.current_seg   = seg_data
+
+            if enriched_dets:
+                self.current_detections = enriched_dets
         except json.JSONDecodeError:
             pass
     

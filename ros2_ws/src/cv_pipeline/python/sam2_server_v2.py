@@ -70,6 +70,10 @@ class CVPipelineServer(Node):
             self.model_manager.load_model("sam2")
         
         self.get_logger().info('CV Pipeline Server ready!')
+
+        # Auto-start YOLO detection streaming once the first image arrives
+        self._auto_stream_started = False
+        self.create_timer(2.0, self._auto_start_stream)
     
     def rgb_callback(self, msg):
         """Store latest RGB image"""
@@ -78,6 +82,22 @@ class CVPipelineServer(Node):
             self.latest_rgb = cv_image
         except Exception as e:
             self.get_logger().error(f'RGB callback error: {e}')
+    def _auto_start_stream(self):
+        """Start YOLO detection streaming automatically once images are available."""
+        if self._auto_stream_started:
+            return
+        if self.latest_rgb is None:
+            return  # No image yet — timer will retry in 2s
+        self._auto_stream_started = True
+        self.get_logger().info('Auto-starting YOLO detection stream @ 5 FPS')
+        self.start_streaming(
+            'yolo11',
+            {'task': 'detect', 'conf': '0.25', 'iou': '0.7', 'stream': 'true', 'duration': '999999'},
+            duration=999999.0,
+            fps=5.0,
+        )
+
+
     
     def depth_callback(self, msg):
         """Store latest depth image"""

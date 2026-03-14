@@ -39,8 +39,8 @@ echo ""
 cleanup() {
     echo ""
     echo -e "${YELLOW}Shutting down all components...${NC}"
-    kill $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $RERUN_VIEWER_PID $RERUN_PID $RVIZ_PID 2>/dev/null
-    wait $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $RERUN_VIEWER_PID $RERUN_PID $RVIZ_PID 2>/dev/null
+    kill $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $MEMORY_PID5 $RERUN_VIEWER_PID $RERUN_PID $RVIZ_PID 2>/dev/null
+    wait $PHASE2_PID $TSDF_PID $SEMANTIC_PID $CV_PIPELINE_PID $MEMORY_PID1 $MEMORY_PID2 $MEMORY_PID3 $MEMORY_PID4 $MEMORY_PID5 $RERUN_VIEWER_PID $RERUN_PID $RVIZ_PID 2>/dev/null
     echo -e "${GREEN}All processes stopped${NC}"
     exit 0
 }
@@ -129,6 +129,11 @@ echo -e "${BLUE}[4/8]${NC} Starting memory system (5-tier)..."
     MEMORY_PID2=$!
     echo "      Async analyser PID: $MEMORY_PID2"
     
+    # Live enrichment (auto pose+seg+face on every YOLO frame)
+    python3 "$WORKSPACE_ROOT/ros2_ws/src/kinect2_slam/kinect2_slam/live_enrichment_node.py" > /tmp/memory_enrichment.log 2>&1 &
+    MEMORY_PID5=$!
+    echo "      Live enrichment PID: $MEMORY_PID5"
+    
     # World synthesiser
     python3 "$WORKSPACE_ROOT/ros2_ws/src/kinect2_slam/kinect2_slam/world_synthesiser_node.py" > /tmp/memory_synthesiser.log 2>&1 &
     MEMORY_PID3=$!
@@ -150,6 +155,14 @@ CV_PIPELINE_PID=$!
 echo "      PID: $CV_PIPELINE_PID (logs: /tmp/cv_pipeline.log)"
 sleep 5
 echo -e "${GREEN}      ✓ CV Pipeline server running${NC}"
+
+# Auto-start YOLO detection streaming (feeds the entire memory pipeline)
+echo ""
+echo -e "${BLUE}      Auto-starting YOLO detection stream...${NC}"
+ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
+    "{data: 'yolo11:task=detect,conf=0.25,iou=0.7,stream=true,duration=999999,fps=5'}" \
+    > /dev/null 2>&1
+echo -e "${GREEN}      ✓ YOLO detection streaming started (5 FPS)${NC}"
 
 # 6. Start Rerun bridge (Python — live visualization)
 echo ""
@@ -204,6 +217,7 @@ echo "  Rerun Bridge:        $RERUN_PID (viewer: $RERUN_VIEWER_PID)"
 echo "  Memory System:"
 echo "    - Checkpointer:    $MEMORY_PID1"
 echo "    - Analyser:        $MEMORY_PID2"
+echo "    - Enrichment:      $MEMORY_PID5"
 echo "    - Synthesiser:     $MEMORY_PID3"
 echo "    - Named Memory:    $MEMORY_PID4"
 echo "  RViz2:               $RVIZ_PID"
@@ -217,6 +231,7 @@ echo "  Rerun:       /tmp/rerun.log  (recording: /tmp/howyouseeme_live.rrd)"
 echo "  Memory:"
 echo "    - Checkpointer:  /tmp/memory_checkpointer.log"
 echo "    - Analyser:      /tmp/memory_analyser.log"
+echo "    - Enrichment:    /tmp/memory_enrichment.log"
 echo "    - Synthesiser:   /tmp/memory_synthesiser.log"
 echo "    - Named Memory:  /tmp/memory_named.log"
 echo "  RViz:        /tmp/rviz.log"

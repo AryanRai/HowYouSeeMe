@@ -961,6 +961,55 @@ class InsightFaceModel(BaseModel):
             return image
 
 
+class HSEmotionModel(BaseModel):
+    """Standalone HSEmotion model — fast emotion recognition from face crops.
+    Wraps InsightFaceWorker's emotion mode so it appears as its own menu entry."""
+
+    def __init__(self, device: str = "cuda"):
+        super().__init__(device)
+        self.model_name = "hsemotion"
+        self.worker = None
+
+    def load(self) -> bool:
+        if not INSIGHTFACE_AVAILABLE:
+            print("InsightFace/HSEmotion not available!")
+            return False
+        try:
+            print(f"Loading HSEmotion on {self.device}...")
+            from insightface_worker import InsightFaceWorker
+            self.worker = InsightFaceWorker(device=self.device)
+            self.worker.load_models(model_pack="buffalo_l")
+            self.worker.prepare(det_size=(640, 640), det_thresh=0.5)
+            self.loaded = True
+            print("✅ HSEmotion loaded and ready!")
+            return True
+        except Exception as e:
+            print(f"Failed to load HSEmotion: {e}")
+            return False
+
+    def get_supported_modes(self) -> List[str]:
+        return ["emotion"]
+
+    def process(self, image: np.ndarray, params: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.loaded:
+            return {"error": "Model not loaded"}
+        try:
+            params = dict(params)
+            params["mode"] = "emotion"
+            return self.worker.process(image, params)
+        except Exception as e:
+            return {"error": str(e)}
+
+    def visualize(self, image: np.ndarray, result: Dict[str, Any], params: Dict[str, Any]) -> np.ndarray:
+        if not self.loaded or "error" in result:
+            return image
+        try:
+            return self.worker.visualize(image, result, params)
+        except Exception as e:
+            print(f"HSEmotion visualization error: {e}")
+            return image
+
+
 class ModelManager:
     """Manages multiple CV models and their activation"""
     
@@ -989,6 +1038,7 @@ class ModelManager:
         # InsightFace
         if INSIGHTFACE_AVAILABLE:
             self.models["insightface"] = InsightFaceModel(self.device)
+            self.models["hsemotion"]   = HSEmotionModel(self.device)
         
         # Add more models here in the future:
         # self.models["depth_anything"] = DepthAnythingModel(self.device)
