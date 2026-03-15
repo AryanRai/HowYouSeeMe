@@ -1,344 +1,360 @@
 # HowYouSeeMe
 
-A ROS 2 perception and spatial memory system that builds a live semantic 3D map of any environment, enriches it with AI vision models, and exposes the robot's world model to any LLM via MCP.
+> **A robot that knows where everything is.**
 
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![ROS2](https://img.shields.io/badge/ROS2-Humble-blue)](https://docs.ros.org/en/humble/)
+[![ROS2](https://img.shields.io/badge/ROS2-Jazzy-blue)](https://docs.ros.org/en/jazzy/)
 [![Kinect](https://img.shields.io/badge/Kinect-v2-orange)](docs/Kinect2_ROS2_Bridge_Setup.md)
 [![CUDA](https://img.shields.io/badge/CUDA-12.6+-green)](https://developer.nvidia.com/cuda-toolkit)
 [![Models](https://img.shields.io/badge/AI_Models-5-purple)](docs/CV_PIPELINE_V2_GUIDE.md)
 
 ---
 
+## The problem
+
+LLMs can reason about the world, but they're blind to it.
+
+You can ask GPT-4 where your keys probably are based on habit. You can ask Claude to help you find your 3D printer. But neither of them can look around the room, remember that the printer was last seen in the hallway three hours ago, notice it's moved, and navigate to it — because they have no persistent, grounded, spatial awareness of the physical world they're supposed to be helping you with.
+
+The gap between "AI that talks about the world" and "AI that actually perceives the world" is a solved problem in robotics research. It just hasn't been assembled into something open, deployable, and LLM-native.
+
+HowYouSeeMe is that assembly.
+
+---
+
 ## What it does
 
-HowYouSeeMe is built around a continuous perception loop. A Microsoft Kinect v2 streams registered RGB-D frames at 14.5 Hz while a BlueLily IMU (MPU6500) supplies 800 Hz inertial data. Both streams feed ORB-SLAM3, which tracks the camera pose in real time and incrementally builds a dense 3D map of the environment. Every frame is simultaneously passed through YOLO11, which detects and classifies objects; the resulting bounding boxes are back-projected into the SLAM coordinate frame to produce a semantically annotated point cloud. The entire state of the visible world — object labels, 3D positions, detection confidences, timestamps — is serialised into a rolling `world_state.json` that always reflects what the robot can currently see.
+A Kinect v2 and a BlueLily IMU feed a continuous perception loop. ORB-SLAM3 tracks the camera pose and builds a 3D map in real time. YOLO11 identifies everything in frame and back-projects each detection into the SLAM coordinate space — so every object gets a 3D world position, not just a pixel bounding box.
 
-Significant perception events (a new person entering the frame, a known object moving, an unusual detection) are written as checkpoints to a short-term memory store on disk. A pool of async workers then enriches each checkpoint with higher-cost models: SAM2 tiny for precise instance masks, InsightFace for face identification across sessions, and FER for emotion estimation. None of these models are kept loaded continuously; they are instantiated, run, and torn down per checkpoint to stay within the 4 GB VRAM budget. Named memories — user-pinned objects like "my keys" or "the charging dock" — are written to a persistent JSON store that survives reboots and accumulates over the robot's lifetime.
+That spatial knowledge accumulates. Objects get tracked across frames. When something significant happens — a person walks in, a known object moves, a new object appears — the system saves a checkpoint: the RGB frame, depth map, pose, and detections, atomically written to disk. Async workers then enrich each checkpoint with SAM2 masks, InsightFace identity, and emotion estimates, without ever blocking the live perception loop.
 
-The robot's world knowledge is exposed to any LLM through a Model Context Protocol server running on port 8090. Tools like `query_world`, `where_is`, `navigate_to`, and `get_camera_frame` give an LLM structured, grounded access to real-time and historical spatial data. Ally, the human-facing voice and chat interface, connects to this MCP endpoint in Robot Mode and can issue commands — "find the 3D printer", "remember where the apple is", "what can you see?" — that resolve to ROS 2 actions on the robot.
+The result is `world_state.json` — a continuously updated document describing every object the robot has ever seen, where it is in 3D space, when it was last confirmed, and anything the system has learned about it. Any LLM can query this via MCP.
+```
+"where is the soldering iron?"
+→ /tmp/world_state.json → last seen at [2.4, 0.8, 0.9] → 4 minutes ago → confidence 0.91
+```
 
-The navigation stack takes a semantic goal (a natural-language description, a named memory, or exact 3D coordinates) and resolves it into a path using an RRT* global planner over the NVBLOX ESDF and a DWA local planner for real-time obstacle avoidance. If the target object has never been seen, the robot enters visual search mode: it sweeps the room while scoring each frame with YOLO confidence and CLIP similarity against a visual description of the target, then back-projects the first confident detection to 3D and pathplans precisely to it. Between active sessions, a sleep-time pipeline runs OpenSplat on accumulated keyframes to produce a Gaussian splat that replaces the sparser TSDF background on the next wakeup, improving map quality passively over time.
+When the robot sleeps, OpenSplat runs on the accumulated keyframes and produces a photorealistic Gaussian splat of the environment — the map gets better every night without any active effort.
+
+---
+
+## Spatial perception for AI
+
+Most AI systems treat space as flat. An image is a grid of pixels. A document is a sequence of tokens. There's no inherent sense of *where* things are relative to each other in 3D, no memory of where something was yesterday, no ability to say "the cup is on the table to the left of the laptop, about 80cm away."
+
+HowYouSeeMe gives an LLM a grounded 3D world model it can query like a database:
+```
+LLM: "Is there anyone in the room?"
+→ query_world() → people: [{position: [1.2, 0.3, 0.0], identity: "unknown", emotion: "neutral"}]
+→ "Yes, one person, about 1.2 metres ahead, appears neutral."
+
+LLM: "Go find the 3D printer"
+→ navigate_to("3D printer")
+→ not in world_state → visual search mode
+→ LLM generates description → robot sweeps room → YOLO+CLIP locks on → pathplans precisely
+→ saves named memory → next time: direct navigation in <15 seconds
+
+LLM: "Remember where I left my keys"
+→ remember_object("keys")
+→ YOLO watches for keys class → locks 3D position on next detection
+→ survives reboots → queryable forever
+```
+
+The MCP server is what makes this composable. Any LLM — Claude, GPT-4, a local Ollama model, Ally's voice interface — can call these tools and get grounded spatial answers. The robot becomes a spatial memory system that any AI can plug into.
+
+---
+
+## Architecture
+
+### The 5 tiers
+```
+┌─────────────────────────────────────────────────────────┐
+│  TIER 1 — always on                                     │
+│  ORB-SLAM3 · YOLO11 · Event checkpointer               │
+│  ~1GB VRAM · 3-4 CPU cores · never killed              │
+├─────────────────────────────────────────────────────────┤
+│  TIER 2 — event-driven                                  │
+│  SAM2 · InsightFace · FER · Async frame analyser       │
+│  spawned on trigger · killed when idle                  │
+├─────────────────────────────────────────────────────────┤
+│  TIER 3 — world synthesis                               │
+│  World synthesiser · Named memory store                 │
+│  merges all perception → world_state.json every 3s     │
+├─────────────────────────────────────────────────────────┤
+│  TIER 4 — persistence                                   │
+│  /tmp/stm/checkpoints · world_state.json               │
+│  ~/howyouseeme_persistent/named_memories.json           │
+├─────────────────────────────────────────────────────────┤
+│  TIER 5 — interface                                     │
+│  MCP server :8090 · RViz · Rerun · Ally Robot Mode     │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Why tiers?** Your GPU has 4GB. Running SAM2, InsightFace, FER, YOLO, and SLAM simultaneously would exceed that. The tier system means at idle you're using ~1GB. A person walks in — InsightFace and FER spin up for that event, enrich the checkpoint asynchronously, then die. Peak usage never exceeds ~1.43GB VRAM.
+
+### Navigation `[PLANNED/WIP]`
+```
+Natural language goal
+        ↓
+Semantic goal resolver
+  ├─ named memory?    → direct 3D coordinate → RRT* → DWA → /cmd_vel
+  ├─ seen recently?   → last known position  → RRT* → DWA → /cmd_vel
+  ├─ room name?       → SLAM map centroid    → RRT* → DWA → /cmd_vel
+  └─ never seen?      → visual search mode
+                            ↓
+                      LLM generates description
+                      + optional web reference image
+                            ↓
+                      room sweep: rotate → expand spiral
+                      score: YOLO conf × CLIP similarity
+                            ↓
+                      detection → back-project → save memory → pathplan
+```
+
+### Sleep-time map enhancement `[PLANNED]`
+```
+Robot active  →  keyframes saved to disk continuously
+Robot sleeps  →  OpenSplat runs on accumulated frames (15-25 min on RTX 3050)
+Robot wakes   →  photorealistic .ply splat loaded as /splat/background
+                 YOLO semantic labels float on top of photorealistic map
+                 map quality improves every night automatically
+```
+
+---
+
+## AI models
+
+| Model | Purpose | Tier | VRAM | When |
+|---|---|---|---|---|
+| YOLO11 | Object detection | 1 | ~400MB | Always |
+| SAM2 tiny | Precise segmentation | 2 | ~280MB | On event |
+| InsightFace | Face identification | 2 | ~200MB | Person detected |
+| FER (hsemotion) | Emotion detection | 2 | ~150MB | Person detected |
+| FastSAM | Fast segmentation | 2 | ~200MB | On demand |
+| CLIP | Visual search matching | nav | ~200MB | Visual search |
+| TensorRT | YOLO acceleration | opt | — | If exported |
+
+**Peak (all active): ~1.43GB VRAM.** Fits on 4GB with headroom for the OS.
+
+---
+
+## MCP tools
+
+The robot's world knowledge as a callable API. Any LLM connects to `http://localhost:8090/mcp`.
+
+| Tool | What it does |
+|---|---|
+| `query_world` | Full world state — objects, people, recent events |
+| `where_is(label)` | Last known 3D position of anything |
+| `remember_object(name, label)` | Pin an object for persistent tracking |
+| `recall_memory(name)` | Get a pinned object's confirmed location |
+| `forget_memory(name)` | Stop tracking |
+| `get_recent_events` | Last N perception events with timestamps |
+| `get_checkpoint(id)` | Retrieve a specific past checkpoint frame and analysis |
+| `get_camera_frame` | Latest RGB frame as base64 JPEG for vision LLMs |
+| `get_robot_status` | Natural language status summary |
+| `get_robot_context` | System prompt context block for Ally Robot Mode |
+| `navigate_to(query)` | Pathfind to anything in natural language `[PLANNED]` |
+| `navigate_to_pose` | Pathfind to exact 3D coordinates `[PLANNED]` |
+| `cancel_navigation` | Stop immediately `[PLANNED]` |
+| `navigation_status` | Current nav state, goal, ETA `[PLANNED]` |
+
+---
+
+## Ally integration
+
+[Ally](https://github.com/AryanRai/Ally) is the voice and chat interface. In Robot Mode it connects to HowYouSeeMe's MCP server and becomes a spatial AI assistant with grounded world knowledge.
+```
+"What can you see right now?"
+→ query_world → objects with 3D positions → natural language description
+
+"Go find the 3D printer"
+→ navigate_to("3D printer") → visual search → pathplan → arrive → confirm
+
+"Remember where the apple is"
+→ remember_object → YOLO watches → pins on next detection → survives reboot
+
+"Show me what you see"
+→ get_camera_frame → base64 JPEG → vision LLM describes the scene
+```
+
+Enabling Robot Mode in Ally automatically fetches `get_robot_status` and injects it as system context — so the LLM always knows the robot's current state before the first message.
+
+---
+
+## Key topics
+
+| Topic | Type | Hz |
+|---|---|---|
+| `/kinect2/hd/image_color` | Image | 14.5 |
+| `/kinect2/hd/image_depth_rect` | Image | 14.5 |
+| `/imu/data` | Imu | 800 |
+| `/orb_slam3/pose` | PoseStamped | 14.5 |
+| `/tsdf/pointcloud` | PointCloud2 | 1 |
+| `/splat/background` | PointCloud2 | 0.1 |
+| `/cv_pipeline/results` | String JSON | 14.5 |
+| `/cv_pipeline/enriched` | String JSON | 14.5 |
+| `/semantic/markers` | MarkerArray | 0.3 |
+| `/semantic/world_state` | String JSON | 0.3 |
+| `/memory/checkpoint_saved` | String | event |
+| `/navigation/path` | Path | event |
+| `/cmd_vel` | Twist | 10 |
+
+---
+
+## Implementation status
+
+| Feature | Status | Notes |
+|---|---|---|
+| Kinect v2 ROS 2 bridge | ✅ done | CUDA-accelerated, 14.5fps |
+| BlueLily IMU bridge | ✅ done | 800Hz, /imu/data |
+| ORB-SLAM3 RGB-D | ✅ done | Visual-only, IMU fusion pending calibration |
+| YOLO11 detection | ✅ done | cv_pipeline, streaming |
+| SAM2 / FastSAM / InsightFace / FER | ✅ done | On-demand workers |
+| Open3D TSDF integrator | ✅ done | 1Hz CPU map update |
+| Semantic projection node | ✅ done | 3D labels in RViz |
+| Event checkpointer | ✅ done | Checkpoint save + enrichment pipeline |
+| Async frame analyser | ✅ done | Non-blocking enrichment worker |
+| Live enrichment node | ✅ done | Real-time face/pose/seg on /cv_pipeline/enriched |
+| World synthesiser | ✅ done | Runs every 3s, outputs world_state.json |
+| Named memory store | ✅ done | Persistent across reboots |
+| MCP server | ✅ done | Port 8090, streamable-http, 10 tools live |
+| Rerun visualisation | ✅ done | rerun_bridge_node, depth+TSDF+pose+enrichment |
+| Ally Robot Mode integration | ✅ done | MCP session handshake, agentic tool loop |
+| IMU-camera calibration (Kalibr) | 🔧 WIP | Identity transform placeholder for now |
+| Navigation stack (RRT* + DWA) | 📋 planned | Fully designed |
+| Visual search (YOLO + CLIP) | 📋 planned | Designed |
+| Sleep-time Gaussian splat | 📋 planned | Designed, needs Orin for full speed |
+| Isaac ROS migration (cuVSLAM + NVBLOX) | 📋 planned | Pending AGX Orin hardware |
+
+---
+
+## Compute targets
+
+| Platform | Status | Notes |
+|---|---|---|
+| RTX 3050 laptop, Ubuntu 24.04 | ✅ current | 4GB VRAM ceiling, dev platform |
+| Jetson AGX Orin 64GB | 📋 planned | 64GB unified memory, target robot platform |
+| Isaac ROS (cuVSLAM + NVBLOX) | 📋 planned | Replaces ORB-SLAM3 + TSDF, same codebase |
+
+---
+
+## Quick start
+
+```bash
+# Dependencies (system Python 3.12, ROS2 Jazzy)
+sudo apt install ros-jazzy-desktop ros-jazzy-cv-bridge
+pip install open3d ultralytics rerun-sdk --user
+
+# Build
+cd ros2_ws && colcon build && source install/setup.bash
+
+# Launch everything
+./scripts/run_complete_slam_system.sh
+
+# Visualisation (separate terminal)
+rerun   # Rerun opens automatically via rerun_bridge_node
+# or RViz:
+rviz2
+```
+
+### Interactive CV model menu
+```bash
+./scripts/cv_pipeline_menu.sh
+```
+```
+CV Pipeline — Model Selection
+
+  1) SAM2          segment anything
+  2) FastSAM       fast segmentation with text prompts
+  3) YOLO11        detection, pose, segmentation, OBB
+  4) InsightFace   face recognition + liveness
+  5) FER           emotion detection (7 emotions)
+
+  8) List available models
+  9) Stop active streaming
+```
+
+---
+
+## Repo structure
+```
+HowYouSeeMe/
+├── ros2_ws/src/
+│   ├── kinect2_ros2_cuda/            Kinect v2 bridge — do not modify
+│   ├── bluelily_bridge/              IMU serial bridge
+│   │   └── src/bluelily_imu_node.cpp
+│   ├── cv_pipeline/                  AI model nodes (C++ pipeline + Python workers)
+│   │   ├── src/cv_pipeline_node.cpp
+│   │   └── python/
+│   │       ├── cv_model_manager.py
+│   │       ├── sam2_server_v2.py
+│   │       ├── sam2_worker.py
+│   │       └── insightface_worker.py
+│   └── kinect2_slam/                 SLAM, memory, MCP, visualisation
+│       ├── kinect2_slam/
+│       │   ├── tsdf_integrator_node.py
+│       │   ├── event_checkpointer_node.py
+│       │   ├── async_analyser_node.py
+│       │   ├── live_enrichment_node.py
+│       │   ├── world_synthesiser_node.py
+│       │   ├── named_memory_node.py
+│       │   ├── rerun_bridge_node.py
+│       │   └── mcp_server.py         ← MCP on :8090
+│       └── launch/
+│           └── howyouseeme_memory.launch.py
+├── scripts/
+│   ├── run_complete_slam_system.sh   ← main launch script
+│   ├── run_phase2_3.sh               ORB-SLAM3 + TSDF
+│   └── cv_pipeline_menu.sh           interactive model selector
+├── integration/
+│   └── Ally/glass-pip-chat/          Ally desktop overlay + Robot Mode
+├── data/faces/                       InsightFace database
+├── orb_slam3_configs/                ORB-SLAM3 YAML configs
+├── kalibr_configs/                   IMU-camera calibration
+└── docs/                             guides and references
+```
+
+---
+
+## Research context
+
+This project draws on several lines of robotics and vision research:
+
+**ConceptFusion (2023)** — language-embedded 3D maps where every point carries a CLIP embedding, enabling natural language spatial queries. Directly relevant to the world synthesiser and semantic projection nodes.
+
+**SayPlan (2023)** — LLM task planning using a 3D scene graph as structured context. `world_state.json` is a simplified scene graph serving exactly this purpose.
+
+**HomeRobot (Meta, 2023)** — open-vocabulary mobile manipulation: find and interact with any object described in natural language. The visual search mode implements a version of this.
+
+**OpenScene / LERF** — queryable neural scene representations where the map itself becomes searchable by language. The sleep-time splat pipeline points toward this direction.
+
+The specific combination — modular on-demand model loading, sleep-time Gaussian splat densification, MCP as the LLM-robot interface standard, and persistent named spatial memory — does not exist as an integrated open system elsewhere. That's the contribution.
+
+---
+
+## Related projects
+
+- **[Ally](https://github.com/AryanRai/Ally)** — glassmorphic desktop AI overlay, Robot Mode connects to HowYouSeeMe via MCP
+- **DroidCore** — full robot control stack that HowYouSeeMe feeds into
 
 ---
 
 ## Hardware
 
-| Component       | Part                        | Interface             |
-|-----------------|-----------------------------|-----------------------|
-| RGB-D camera    | Microsoft Kinect v2         | USB 3.0               |
-| IMU             | BlueLily (MPU6500)          | /dev/ttyACM0 115200   |
-| Compute (dev)   | RTX 3050 laptop, Ubuntu 22  | CUDA 12.x             |
-| Compute (robot) | Jetson AGX Orin 64GB        | JetPack 6 `[PLANNED]` |
+| Component | Part | Interface |
+|---|---|---|
+| RGB-D camera | Microsoft Kinect v2 | USB 3.0 |
+| IMU | BlueLily (MPU6500) | /dev/ttyACM0 115200 baud |
+| Compute (dev) | RTX 3050 laptop, Ubuntu 24.04 | CUDA 12.x |
+| Compute (robot) | Jetson AGX Orin 64GB `[planned]` | JetPack 6 |
+
+The robot head is a 3D-printed enclosure mounting the Kinect v2 front-facing, BlueLily IMU internally, and compute on top. See [Robot Head Setup](docs/ROBOT_HEAD_SETUP.md).
 
 ---
 
-## System Architecture
-
-### The 5 tiers
-
-**Tier 1 — Always on**
-
-ORB-SLAM3 (pose + map), YOLO11 (object detection), event checkpointer.
-These three nodes run continuously. Nothing in this tier is ever killed.
-VRAM cost: ~1 GB. CPU: 3–4 cores.
-
-**Tier 2 — Event-driven**
-
-Async frame analyser, SAM2 (precise masks), InsightFace (face ID), FER (emotion).
-Spawned when triggered by Tier 1 events, killed when idle.
-Only run when a checkpoint justifies the compute cost.
-
-**Tier 3 — World synthesis**
-
-World synthesiser (merges all perception into `world_state.json` every 3 s).
-Named memory store (persistent object location tracking).
-
-**Tier 4 — Persistence**
-
-```
-/tmp/stm/                                        short-term checkpoint memory
-/tmp/world_state.json                            live world model
-~/howyouseeme_persistent/named_memories.json     survives reboots
-```
-
-**Tier 5 — Interface**
-
-- MCP server (port 8090) — LLM tool interface
-- RViz semantic overlay — live visualisation
-- Rerun logger — timeline recording and session replay
-- Ally integration — voice + chat interface via Robot Mode
-
-### Navigation stack `[PLANNED/WIP]`
-
-```
-Semantic goal resolver → RRT* global planner → DWA local planner → /cmd_vel
-Visual search mode for unknown objects (YOLO + CLIP + optional web image fetch)
-```
-
-### Sleep-time map enhancement `[PLANNED]`
-
-```
-Keyframe exporter → sleep detector → OpenSplat Gaussian splat → splat loader
-Runs offline while robot is idle. Improves map quality each session.
-```
-
----
-
-## Key ROS 2 Topics
-
-| Topic                          | Type             | Publisher            | Hz     |
-|-------------------------------|------------------|----------------------|--------|
-| /kinect2/hd/image_color        | Image            | kinect2_bridge       | 14.5   |
-| /kinect2/hd/image_depth_rect   | Image            | kinect2_bridge       | 14.5   |
-| /imu/data                      | Imu              | bluelily_bridge      | 800    |
-| /orb_slam3/pose                | PoseStamped      | orb_slam3            | 14.5   |
-| /tsdf/pointcloud               | PointCloud2      | tsdf_integrator      | 1      |
-| /splat/background              | PointCloud2      | splat_loader         | 0.1    |
-| /cv_pipeline/results           | String (JSON)    | yolo_node            | 14.5   |
-| /semantic/markers              | MarkerArray      | semantic_projection  | 0.3    |
-| /semantic/world_state          | String (JSON)    | world_synthesiser    | 0.3    |
-| /memory/checkpoint_saved       | String           | event_checkpointer   | event  |
-| /memory/updated                | String           | named_memory_node    | event  |
-| /robot/sleeping                | Bool             | sleep_detector       | event  |
-| /navigation/status             | String (JSON)    | navigation_manager   | 1      |
-| /navigation/path               | Path             | rrt_star_planner     | event  |
-| /cmd_vel                       | Twist            | dwa_local_planner    | 10     |
-
----
-
-## MCP Tools
-
-All tools exposed at `http://localhost:8090/mcp`
-
-| Tool                  | Description                                                        |
-|-----------------------|--------------------------------------------------------------------|
-| query_world           | Returns full world state — objects, people, events                 |
-| where_is(label)       | Last known 3D position of any object or person                     |
-| remember_object       | Pin an object for persistent tracking                              |
-| recall_memory         | Get a pinned object's current confirmed location                   |
-| forget_memory         | Stop tracking a named memory                                       |
-| get_recent_events     | Last N perception events with timestamps                           |
-| get_checkpoint        | Full metadata for a specific checkpoint event                      |
-| get_camera_frame      | Latest RGB frame as base64 JPEG for vision LLMs                    |
-| get_robot_status      | Natural language summary of robot state                            |
-| get_robot_context     | System prompt context block for Ally Robot Mode                    |
-| navigate_to(query)    | Pathfind to object/room described in natural language              |
-| navigate_to_pose      | Pathfind to exact 3D coordinates                                   |
-| cancel_navigation     | Stop robot immediately                                             |
-| navigation_status     | Current nav state, goal, progress, ETA                             |
-
----
-
-## AI Models
-
-| Model        | Purpose                    | Tier | VRAM    | When active   |
-|--------------|----------------------------|------|---------|---------------|
-| YOLO11       | Object detection           | 1    | ~400 MB | Always        |
-| SAM2 tiny    | Precise segmentation       | 2    | ~280 MB | On event      |
-| InsightFace  | Face identification        | 2    | ~200 MB | Person event  |
-| FER          | Emotion detection          | 2    | ~150 MB | Person event  |
-| FastSAM      | Fast segmentation          | 2    | ~200 MB | On demand     |
-| CLIP         | Visual search matching     | nav  | ~200 MB | Visual search |
-| TensorRT     | YOLO acceleration          | opt  | —       | If exported   |
-
-Total peak (all active): ~1.43 GB VRAM — fits on 4 GB with headroom.
-
----
-
-## Navigation `[PLANNED/WIP]`
-
-### Goal types
-
-- **Named memory**: "my keys" → direct pathplan to pinned location
-- **Known object**: "cup" → last seen position from `world_state.json`
-- **Room label**: "kitchen" → SLAM map room centroid
-- **Unknown object**: "3D printer" → visual search mode
-
-### Visual search mode
-
-For objects never seen before:
-1. LLM generates visual description of target
-2. Optionally fetch reference image from web (SerpAPI or LLM-suggested URL)
-3. Robot sweeps room — rotate in place, then expanding spiral
-4. Each frame scored: YOLO confidence + CLIP similarity vs description
-5. On detection: back-project to 3D, save named memory, pathplan precisely
-
-### Planners
-
-- **Global**: RRT* on NVBLOX ESDF (falls back to A* on 2D occupancy if no ESDF)
-- **Local**: DWA — samples velocity commands, scores by heading + clearance + speed
-- **Replan**: triggered when obstacle appears within 0.15 m of planned path
-
----
-
-## Sleep-time Map Enhancement `[PLANNED]`
-
-While the robot is idle (no sensor activity for 60 s):
-1. Keyframe exporter has been saving RGB frames + ORB-SLAM3 poses to disk
-2. Sleep detector fires, launches OpenSplat on accumulated keyframes
-3. OpenSplat runs overnight at `--resolution 2 --iters 5000` on robot GPU
-4. Finished `.ply` splat loaded as `/splat/background` on next wakeup
-5. Splat improves progressively — better map quality each sleep cycle
-6. RViz layers: splat base → live TSDF → semantic markers → robot pose
-
----
-
-## Ally Integration `[PLANNED/WIP]`
-
-Ally (https://github.com/[your-ally-repo]) is the human-facing interface.
-HowYouSeeMe registers as an MCP server in Ally's Robot Mode.
-
-**What Ally can do when connected:**
-
-> Voice: "What can you see right now?"
-> → `query_world` → describes all detected objects with 3D positions
-
-> Voice: "Go find the 3D printer"
-> → `navigate_to("3D printer")` → visual search → pathplan → arrive
-
-> Voice: "Remember where the apple is"
-> → `remember_object` → YOLO watches for apple → pins location on detection
-
-> Voice: "Show me what you see"
-> → `get_camera_frame` → base64 JPEG → vision LLM describes scene
-
-Connection: `http://localhost:8090/mcp`
-Robot Mode toggle in Ally automatically injects robot status as system context.
-
----
-
-## Visualisation
-
-### RViz (live operation)
-
-Displays: TSDF point cloud, splat background, semantic labels, robot pose, navigation path, goal markers.
-
-### Rerun (debugging + session replay)
-
-Records all streams with timestamps. Scrub back to any moment and see exactly what the robot perceived — RGB, depth, YOLO detections, pose, world state — all synced.
-
-```bash
-pip install rerun-sdk --break-system-packages
-# Sessions saved to ~/howyouseeme_sessions/session_<date>.rrd
-rerun ~/howyouseeme_sessions/session_latest.rrd
-```
-
----
-
-## Compute Targets
-
-| Platform              | Status      | Notes                                                                   |
-|-----------------------|-------------|-------------------------------------------------------------------------|
-| RTX 3050 laptop       | `[DONE]`    | Development platform, 4 GB VRAM ceiling                                 |
-| Jetson AGX Orin 64GB  | `[PLANNED]` | Target robot platform, 64 GB unified memory                             |
-| Isaac ROS migration   | `[PLANNED]` | cuVSLAM + NVBLOX replace current SLAM/TSDF. Same codebase, one CMake flag change |
-
----
-
-## Phase Implementation Status
-
-| Feature                                   | Status      | Notes                                                         |
-|-------------------------------------------|-------------|---------------------------------------------------------------|
-| Phase 1 — IMU-camera calibration (Kalibr) | `[WIP]`     | IMU disabled for now, identity transform placeholder          |
-| Phase 2 — ORB-SLAM3 RGB-D                 | `[DONE]`    | Running without IMU fusion, visual-only mode                  |
-| Phase 3 — Open3D TSDF integrator node     | `[DONE]`    | `tsdf_integrator_node.py`, 1 Hz map update on CPU             |
-| Phase 4 — Semantic projection node        | `[DONE]`    | YOLO detections back-projected to 3D; floating labels in RViz via `/semantic/markers` |
-| Tier 1–5 memory system                    | `[WIP]`     | Event checkpointer done; async analyser in progress; world synthesiser in progress; named memory store planned; MCP server planned |
-| Sleep-time Gaussian splat pipeline        | `[PLANNED]` | Keyframe exporter, sleep detector, OpenSplat launcher, splat loader all designed, not yet implemented |
-| Navigation stack                          | `[PLANNED]` | RRT*, DWA, semantic resolver, visual search all designed      |
-| Ally integration                          | `[PLANNED]` | MCP server must be running first                              |
-| Rerun visualisation                       | `[WIP]`     | Logger node written, not yet in launch file                   |
-| Isaac ROS migration                       | `[PLANNED]` | Pending Jetson AGX Orin hardware purchase                     |
-
----
-
-## Quick Start
-
-```bash
-# Dependencies
-sudo apt install ros-humble-desktop ros-humble-cv-bridge
-pip install open3d ultralytics rerun-sdk --break-system-packages
-
-# Build
-cd ros2_ws && colcon build
-source install/setup.bash
-
-# Launch full stack
-ros2 launch kinect2_slam howyouseeme_full.launch.py
-
-# MCP server (separate terminal)
-python3 ros2_ws/src/kinect2_slam/python/mcp_server.py
-
-# Visualisation (separate terminal)
-ros2 launch kinect2_slam rviz.launch.py
-# or for Rerun:
-rerun  # viewer opens automatically when logger node starts
-```
-
----
-
-## Repo Structure
-
-```
-HowYouSeeMe/
-├── ros2_ws/src/
-│   ├── kinect2_ros2_cuda/        Kinect v2 ROS 2 bridge — do not modify
-│   ├── bluelily_bridge/          IMU serial bridge
-│   │   └── python/
-│   │       └── bluelily_imu_node.py
-│   ├── cv_pipeline/              AI model nodes
-│   │   └── python/
-│   │       ├── yolo_node.py
-│   │       ├── sam2_service_node.py
-│   │       ├── insightface_service_node.py
-│   │       ├── semantic_projection_node.py
-│   │       └── visual_search_node.py
-│   └── kinect2_slam/             Core SLAM and memory system
-│       ├── launch/
-│       │   └── howyouseeme_full.launch.py
-│       └── python/
-│           ├── tsdf_integrator_node.py
-│           ├── event_checkpointer_node.py
-│           ├── async_analyser_node.py
-│           ├── world_synthesiser_node.py
-│           ├── named_memory_node.py
-│           ├── keyframe_exporter_node.py
-│           ├── sleep_detector_node.py
-│           ├── splat_loader_node.py
-│           ├── rerun_logger_node.py
-│           ├── navigation_manager_node.py
-│           ├── rrt_star_planner.py
-│           ├── dwa_local_planner.py
-│           ├── semantic_goal_resolver.py
-│           └── web_image_fetcher.py
-├── scripts/
-│   ├── run_opensplat.sh
-│   └── merge_splats.py
-├── BlueLily/                     IMU firmware — do not modify
-├── mcp_server.py                 MCP HTTP server on :8090
-└── README.md
-```
-
----
-
-## Related Projects
-
-- **Ally** — https://github.com/[your-ally-repo]
-  Desktop AI overlay, Robot Mode connects to HowYouSeeMe via MCP
-
-- **DroidCore** — [link if public]
-  Full robot control stack that HowYouSeeMe feeds into
-
----
-
-## Research Context
-
-This system implements concepts from:
-
-- **ConceptFusion (2023)** — language-embedded 3D maps
-- **SayPlan (2023)** — LLM task planning via 3D scene graphs
-- **HomeRobot (Meta, 2023)** — open vocabulary mobile manipulation
-- **OpenScene / LERF** — queryable neural scene representations
-
-The specific combination of modular on-demand model loading, sleep-time Gaussian splat densification, MCP as the LLM-robot interface standard, and persistent named spatial memory as an open deployable system is the novel contribution of this project.
+## Contact
+
+- GitHub: [@AryanRai](https://github.com/AryanRai)
+- Email: buzzaryanrai@gmail.com
+- Issues: [GitHub Issues](https://github.com/AryanRai/HowYouSeeMe/issues)
