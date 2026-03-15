@@ -1,12 +1,26 @@
 # HowYouSeeMe
 
-> **A robot that knows where everything is.**
+<div align="center">
+
+**Give any LLM a pair of eyes, a memory, and a map.**
 
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![ROS2](https://img.shields.io/badge/ROS2-Jazzy-blue)](https://docs.ros.org/en/jazzy/)
 [![Kinect](https://img.shields.io/badge/Kinect-v2-orange)](docs/Kinect2_ROS2_Bridge_Setup.md)
 [![CUDA](https://img.shields.io/badge/CUDA-12.6+-green)](https://developer.nvidia.com/cuda-toolkit)
 [![Models](https://img.shields.io/badge/AI_Models-5-purple)](docs/CV_PIPELINE_V2_GUIDE.md)
+
+</div>
+
+---
+
+<div align="center">
+
+| ![ORB-SLAM3](images/orbslam.png) | ![Person](images/person.png) |
+|:---:|:---:|
+| ![RViz](images/rviz.png) | ![Ally](images/ally.png) |
+
+</div>
 
 ---
 
@@ -18,7 +32,7 @@ You can ask GPT-4 where your keys probably are based on habit. You can ask Claud
 
 The gap between "AI that talks about the world" and "AI that actually perceives the world" is a solved problem in robotics research. It just hasn't been assembled into something open, deployable, and LLM-native.
 
-HowYouSeeMe is that assembly.
+**HowYouSeeMe is that assembly.**
 
 ---
 
@@ -29,6 +43,7 @@ A Kinect v2 and a BlueLily IMU feed a continuous perception loop. ORB-SLAM3 trac
 That spatial knowledge accumulates. Objects get tracked across frames. When something significant happens — a person walks in, a known object moves, a new object appears — the system saves a checkpoint: the RGB frame, depth map, pose, and detections, atomically written to disk. Async workers then enrich each checkpoint with SAM2 masks, InsightFace identity, and emotion estimates, without ever blocking the live perception loop.
 
 The result is `world_state.json` — a continuously updated document describing every object the robot has ever seen, where it is in 3D space, when it was last confirmed, and anything the system has learned about it. Any LLM can query this via MCP.
+
 ```
 "where is the soldering iron?"
 → /tmp/world_state.json → last seen at [2.4, 0.8, 0.9] → 4 minutes ago → confidence 0.91
@@ -38,27 +53,12 @@ When the robot sleeps, OpenSplat runs on the accumulated keyframes and produces 
 
 ---
 
-## Screenshots
-
-| ORB-SLAM3 live tracking | RViz semantic map |
-|---|---|
-| ![ORB-SLAM3](images/orbslam.png) | ![RViz](images/rviz.png) |
-
-| Person detection + face recognition | Object detection (bedroom) |
-|---|---|
-| ![Person](images/person.png) | ![Bedroom](images/bed.png) |
-
-| Ally Robot Mode — spatial AI assistant |
-|---|
-| ![Ally](images/ally.png) |
-
----
-
 ## Spatial perception for AI
 
-Most AI systems treat space as flat. An image is a grid of pixels. A document is a sequence of tokens. There's no inherent sense of *where* things are relative to each other in 3D, no memory of where something was yesterday, no ability to say "the cup is on the table to the left of the laptop, about 80cm away."
+> Most AI systems treat space as flat. HowYouSeeMe gives an LLM a grounded 3D world model it can query like a database.
 
-HowYouSeeMe gives an LLM a grounded 3D world model it can query like a database:
+No inherent sense of *where* things are relative to each other in 3D, no memory of where something was yesterday, no ability to say "the cup is on the table to the left of the laptop, about 80cm away." Until now.
+
 ```
 LLM: "Is there anyone in the room?"
 → query_world() → people: [{position: [1.2, 0.3, 0.0], identity: "unknown", emotion: "neutral"}]
@@ -76,7 +76,7 @@ LLM: "Remember where I left my keys"
 → survives reboots → queryable forever
 ```
 
-The MCP server is what makes this composable. Any LLM — Claude, GPT-4, a local Ollama model, Ally's voice interface — can call these tools and get grounded spatial answers. The robot becomes a spatial memory system that any AI can plug into.
+The MCP server makes this composable. Any LLM — Claude, GPT-4, a local Ollama model, Ally's voice interface — connects to `http://localhost:8090/mcp` and gets grounded spatial answers. The robot becomes a spatial memory system that any AI can plug into.
 
 ---
 
