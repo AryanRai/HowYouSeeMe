@@ -173,23 +173,47 @@ async def get_robot_status() -> str:
     except FileNotFoundError:
         return "Robot world state not available — system may not be running."
 
+    import time
     robot = data.get("robot", {})
     objects = data.get("objects", {})
     people = data.get("people", {})
     memories = data.get("named_memories", {})
     sleeping = pathlib.Path("/tmp/robot_sleeping").exists()
+    age_s = time.time() - data.get("generated_at", time.time())
 
-    obj_list = ", ".join(set(v["label"] for v in objects.values())) or "nothing"
-    people_count = len(people)
-    mem_list = ", ".join(memories.keys()) or "none"
     pos = robot.get("position", [0, 0, 0])
 
+    # Objects summary
+    obj_labels = [v["label"] for v in objects.values()]
+    obj_summary = ", ".join(
+        f"{count}x {label}" for label, count in
+        sorted({l: obj_labels.count(l) for l in set(obj_labels)}.items())
+    ) if obj_labels else "no objects"
+
+    # People summary with face names
+    people_parts = []
+    for p in people.values():
+        face = p.get("face_name")
+        conf = p.get("confidence", 0.0)
+        dist = p.get("position", [0, 0, 0])
+        dist_m = (dist[0]**2 + dist[1]**2 + dist[2]**2) ** 0.5
+        emotion = p.get("emotion", "")
+        desc = face if (face and face != "unknown") else "unknown person"
+        if emotion:
+            desc += f" ({emotion})"
+        desc += f" ~{dist_m:.1f}m away"
+        people_parts.append(desc)
+    people_summary = "; ".join(people_parts) if people_parts else "no people"
+
+    mem_list = ", ".join(memories.keys()) or "none"
+
     return (
-        f"Robot is {'sleeping' if sleeping else 'active'}. "
+        f"Robot is {'sleeping' if sleeping else 'active'} "
+        f"(world state {age_s:.0f}s old). "
         f"Position: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f}). "
-        f"Currently seeing: {obj_list}. "
-        f"People nearby: {people_count}. "
-        f"Tracked memories: {mem_list}."
+        f"Objects in view: {obj_summary}. "
+        f"People: {people_summary}. "
+        f"Named memories: {mem_list}."
     )
 
 

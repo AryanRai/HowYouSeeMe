@@ -118,9 +118,10 @@ class HowYouSeeMeBridge(Node):
 
         self.get_logger().info('Rerun bridge subscribed to all topics')
 
-        # Log a static pinhole camera so 2D image entities have a proper ancestor
-        # (suppresses "2D visualizers require a pinhole ancestor" warnings)
-        rr.log('world/camera', rr.Pinhole(
+        # world/camera        ← Transform3D (updated per pose)
+        # world/camera/image  ← Pinhole (static intrinsics)
+        # world/camera/image/rgb, world/camera/image/depth  ← 2D data
+        rr.log('world/camera/image', rr.Pinhole(
             focal_length=[1081.37 / 4, 1081.37 / 4],   # divided by 4x downsample
             principal_point=[959.5 / 4, 539.5 / 4],
             width=480, height=270,
@@ -147,7 +148,7 @@ class HowYouSeeMeBridge(Node):
             img = img[::4, ::4]  # 4x downsample → 480x270
             with self._latest_rgb_lock:
                 self._latest_rgb = img
-            rr.log('world/camera/rgb', rr.Image(img))
+            rr.log('world/camera/image/rgb', rr.Image(img))
         except Exception as e:
             self.get_logger().warn(f'RGB: {e}', throttle_duration_sec=5.0)
 
@@ -163,7 +164,7 @@ class HowYouSeeMeBridge(Node):
             self._set_time(msg.header.stamp)
             depth = _ros_image_to_numpy(msg)
             depth = depth[::4, ::4]
-            rr.log('world/camera/depth', rr.DepthImage(depth, meter=1000.0))
+            rr.log('world/camera/image/depth', rr.DepthImage(depth, meter=1000.0))
         except Exception as e:
             self.get_logger().warn(f'Depth: {e}', throttle_duration_sec=5.0)
 
@@ -181,11 +182,6 @@ class HowYouSeeMeBridge(Node):
 
             # Update camera transform so depth/RGB project into world correctly
             rr.log('world/camera', rr.Transform3D(
-                translation=[p.x, p.y, p.z],
-                quaternion=rr.Quaternion(xyzw=[q.x, q.y, q.z, q.w]),
-            ))
-
-            rr.log('world/camera_pose', rr.Transform3D(
                 translation=[p.x, p.y, p.z],
                 quaternion=rr.Quaternion(xyzw=[q.x, q.y, q.z, q.w]),
             ))
@@ -341,7 +337,7 @@ class HowYouSeeMeBridge(Node):
                     labels.append(label)
                     colors.append([0, 255, 0] if recog else [255, 100, 0])
 
-                rr.log('camera/rgb/faces', rr.Boxes2D(
+                rr.log('world/camera/image/rgb/faces', rr.Boxes2D(
                     array=np.array(boxes, dtype=np.float32),
                     array_format=rr.Box2DFormat.XYWH,
                     labels=labels,
@@ -376,13 +372,13 @@ class HowYouSeeMeBridge(Node):
                         if kp[2] > 0.3:
                             all_kpt_pts.append([kp[0] * scale, kp[1] * scale])
                 if all_strips:
-                    rr.log('camera/rgb/pose', rr.LineStrips2D(
+                    rr.log('world/camera/image/rgb/pose', rr.LineStrips2D(
                         all_strips,
                         colors=[255, 128, 0],
                         radii=1.5,
                     ))
                 if all_kpt_pts:
-                    rr.log('camera/rgb/pose_keypoints', rr.Points2D(
+                    rr.log('world/camera/image/rgb/pose_keypoints', rr.Points2D(
                         np.array(all_kpt_pts, dtype=np.float32),
                         colors=[255, 200, 0],
                         radii=3.0,
@@ -400,7 +396,7 @@ class HowYouSeeMeBridge(Node):
                     boxes.append([x1, y1, x2 - x1, y2 - y1])
                     labels.append(f"{s['label']} {s['conf']:.0%}")
                     colors.append([0, 200, 255])
-                rr.log('camera/rgb/segmentation', rr.Boxes2D(
+                rr.log('world/camera/image/rgb/segmentation', rr.Boxes2D(
                     array=np.array(boxes, dtype=np.float32),
                     array_format=rr.Box2DFormat.XYWH,
                     labels=labels,
@@ -447,7 +443,7 @@ class HowYouSeeMeBridge(Node):
                     labels.append(f'{label} {conf:.0%}')
                     colors.append(list(_color_for(label)))
                 if boxes:
-                    rr.log('camera/rgb/detections', rr.Boxes2D(
+                    rr.log('world/camera/image/rgb/detections', rr.Boxes2D(
                         array=np.array(boxes, dtype=np.float32),
                         array_format=rr.Box2DFormat.XYWH,
                         labels=labels,

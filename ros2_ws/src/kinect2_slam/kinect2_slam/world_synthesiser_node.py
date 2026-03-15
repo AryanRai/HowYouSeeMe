@@ -118,17 +118,15 @@ class WorldSynthesiserNode(Node):
 
             # Propagate face names into people_db immediately
             if faces:
-                for person_id, person in self.people_db.items():
-                    if not faces:
-                        break
-                    best = max(faces, key=lambda f: f.get('similarity', 0.0))
-                    if best.get('recognized') and best.get('name'):
+                best = max(faces, key=lambda f: f.get('similarity', 0.0))
+                if best.get('recognized') and best.get('name'):
+                    # Apply to all people currently tracked (usually 1 person at a time)
+                    for person in self.people_db.values():
                         person['face_name'] = best['name']
                         person['face_similarity'] = best.get('similarity', 0.0)
                         person['age'] = best.get('age')
                         person['gender'] = best.get('gender')
-                        # Store emotion if present
-                        emo = best.get('emotion') or best.get('dominant_emotion')
+                        emo = best.get('emotion')
                         if emo:
                             person['emotion'] = emo
                             person['emotion_score'] = best.get('emotion_score', 0.0)

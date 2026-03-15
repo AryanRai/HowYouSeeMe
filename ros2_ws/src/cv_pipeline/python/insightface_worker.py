@@ -574,14 +574,40 @@ class InsightFaceWorker:
         elif mode == 'emotion':
             return self.detect_emotion(image, params)
         elif mode == 'analyze':
-            # Full analysis: detect + recognize + liveness + emotion
+            # Full analysis: detect + recognize + emotion merged per face
             result = self.detect_and_recognize(image, params)
+            
+            # Merge emotion into each face result
+            if HSEMOTION_AVAILABLE and self.emotion_detector is not None and result['num_faces'] > 0:
+                try:
+                    emotion_result = self.detect_emotion(image, params)
+                    emo_faces = emotion_result.get('faces', [])
+                    # Match by bbox proximity and merge emotion into recognition result
+                    for face in result['faces']:
+                        fx1, fy1, fx2, fy2 = face['bbox']
+                        fc_x = (fx1 + fx2) / 2
+                        fc_y = (fy1 + fy2) / 2
+                        best_emo = None
+                        best_dist = float('inf')
+                        for ef in emo_faces:
+                            ex1, ey1, ex2, ey2 = ef['bbox']
+                            ec_x = (ex1 + ex2) / 2
+                            ec_y = (ey1 + ey2) / 2
+                            dist = ((fc_x - ec_x) ** 2 + (fc_y - ec_y) ** 2) ** 0.5
+                            if dist < best_dist:
+                                best_dist = dist
+                                best_emo = ef
+                        if best_emo and best_dist < 100:
+                            face['emotion'] = best_emo.get('emotion')
+                            face['emotion_score'] = best_emo.get('confidence', 0.0)
+                except Exception as e:
+                    print(f"[InsightFace] Emotion merge failed: {e}")
+            
+            # Liveness check if depth available
             if depth_image is not None and result['num_faces'] > 0:
                 liveness = self.check_liveness(image, depth_image, params)
                 result['liveness'] = liveness
-            if HSEMOTION_AVAILABLE and result['num_faces'] > 0:
-                emotion = self.detect_emotion(image, params)
-                result['emotion'] = emotion
+            
             return result
         else:
             return {'error': f'Unknown mode: {mode}'}
