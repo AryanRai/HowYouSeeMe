@@ -48,6 +48,10 @@ When the robot sleeps, OpenSplat runs on the accumulated keyframes and produces 
 |---|---|
 | ![Person](images/person.png) | ![Bedroom](images/bed.png) |
 
+| Ally Robot Mode — spatial AI assistant |
+|---|
+| ![Ally](images/ally.png) |
+
 ---
 
 ## Spatial perception for AI
