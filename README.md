@@ -1,6 +1,6 @@
-# HowYouSeeMe - Advanced ROS2 Computer Vision System
+# HowYouSeeMe
 
-> **A production-ready ROS2 computer vision system featuring Kinect v2, RTABMap SLAM, and 5 AI models for real-time perception, segmentation, detection, face recognition, and emotion analysis.**
+A ROS 2 perception and spatial memory system that builds a live semantic 3D map of any environment, enriches it with AI vision models, and exposes the robot's world model to any LLM via MCP.
 
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![ROS2](https://img.shields.io/badge/ROS2-Humble-blue)](https://docs.ros.org/en/humble/)
@@ -8,868 +8,337 @@
 [![CUDA](https://img.shields.io/badge/CUDA-12.6+-green)](https://developer.nvidia.com/cuda-toolkit)
 [![Models](https://img.shields.io/badge/AI_Models-5-purple)](docs/CV_PIPELINE_V2_GUIDE.md)
 
-## 🎯 Overview
+---
 
-HowYouSeeMe is a **complete computer vision system** built on ROS2 Humble, providing real-time 3D perception, object detection, segmentation, face recognition, and emotion analysis. The system integrates multiple state-of-the-art AI models with Kinect v2 RGB-D sensing and RTABMap SLAM for comprehensive spatial understanding.
+## What it does
 
-<img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/78f43bb2-b5f5-4dd2-9194-f15a24b39bbd" />
+HowYouSeeMe is built around a continuous perception loop. A Microsoft Kinect v2 streams registered RGB-D frames at 14.5 Hz while a BlueLily IMU (MPU6500) supplies 800 Hz inertial data. Both streams feed ORB-SLAM3, which tracks the camera pose in real time and incrementally builds a dense 3D map of the environment. Every frame is simultaneously passed through YOLO11, which detects and classifies objects; the resulting bounding boxes are back-projected into the SLAM coordinate frame to produce a semantically annotated point cloud. The entire state of the visible world — object labels, 3D positions, detection confidences, timestamps — is serialised into a rolling `world_state.json` that always reflects what the robot can currently see.
 
+Significant perception events (a new person entering the frame, a known object moving, an unusual detection) are written as checkpoints to a short-term memory store on disk. A pool of async workers then enriches each checkpoint with higher-cost models: SAM2 tiny for precise instance masks, InsightFace for face identification across sessions, and FER for emotion estimation. None of these models are kept loaded continuously; they are instantiated, run, and torn down per checkpoint to stay within the 4 GB VRAM budget. Named memories — user-pinned objects like "my keys" or "the charging dock" — are written to a persistent JSON store that survives reboots and accumulates over the robot's lifetime.
 
-### 🌍 Vision: World State Perception System
+The robot's world knowledge is exposed to any LLM through a Model Context Protocol server running on port 8090. Tools like `query_world`, `where_is`, `navigate_to`, and `get_camera_frame` give an LLM structured, grounded access to real-time and historical spatial data. Ally, the human-facing voice and chat interface, connects to this MCP endpoint in Robot Mode and can issue commands — "find the 3D printer", "remember where the apple is", "what can you see?" — that resolve to ROS 2 actions on the robot.
 
-HowYouSeeMe is the **perception foundation** for an intelligent robotics ecosystem that combines:
-- **Computer Vision Models**: YOLO, SAM, Segmentation, VLMs
-- **SLAM & Mapping**: RTABMap for 3D spatial understanding
-- **IMU Fusion**: BlueLily integration for enhanced localization
-- **World State Summarizer**: Unified interface combining all active models
-- **MCP Server**: Model Context Protocol for LLM integration
-- **Visual Memory System**: Persistent object tracking and spatial memory
-
-The goal is to create a **unified world state** that any LLM can query to understand the robot's environment, remember object locations, and make informed decisions based on real-time perception.
-
-## ✨ Key Features
-
-### 🤖 **5 AI Models - Unified Pipeline**
-1. **SAM2 (Segment Anything Model 2)** - Real-time segmentation
-   - Point, box, and everything modes
-   - Streaming support up to 30 FPS
-   - Optimized for 4GB GPUs (0.28GB VRAM)
-
-2. **FastSAM** - Fast segmentation with text prompts
-   - Natural language descriptions
-   - Multiple prompt types (point, box, text)
-   - Real-time performance
-
-3. **YOLO11** - Multi-task detection
-   - Object detection
-   - Instance segmentation
-   - Pose estimation
-   - Oriented bounding boxes (OBB)
-
-4. **InsightFace** - Face recognition & liveness
-   - Face detection and recognition
-   - Face database management
-   - Liveness detection (anti-spoofing)
-   - Age and gender estimation
-
-5. **Emotion Detection (FER)** - 7 emotions
-   - Happy, Sad, Angry, Surprise, Fear, Disgust, Neutral
-   - Real-time streaming
-   - Multi-face support
-   - Color-coded visualization
-
-### 🎮 **Interactive Menu System**
-```bash
-./cv_menu.sh  # Launch interactive menu
-```
-
-```
-CV Pipeline - Model Selection
-========================================
-
-Select a Model:
-
-  1) 🎯 SAM2 - Segment Anything Model 2
-  2) ⚡ FastSAM - Faster SAM with Text Prompts
-  3) 🔍 YOLO11 - Detection, Pose, Segmentation, OBB
-  4) 👤 InsightFace - Face Recognition & Liveness
-  5) 😊 Emotion Detection - 7 Emotions (FER)
-  6) 📊 [Future] Depth Anything
-  7) 🧠 [Future] DINO Features
-
-System Commands:
-  8) 📋 List Available Models
-  9) 🛑 Stop Active Streaming
-```
-
-### 🗺️ **RTABMap SLAM Integration**
-- Real-time 3D mapping and localization
-- Loop closure detection
-- RGB-D odometry
-- Point cloud generation
-- TF2 coordinate transforms
-
-### 📡 **Kinect v2 Bridge**
-- 14.5 FPS RGB-D streaming
-- Multiple resolutions (HD, QHD, SD)
-- CUDA-accelerated processing
-- 30+ ROS2 topics
-- Calibrated depth and color alignment
-
-## 🚀 Quick Start
-
-### Complete SLAM + CV System
-
-```bash
-# Launch everything (Kinect + ORB-SLAM3 + TSDF + Semantic + CV Pipeline + RViz)
-./scripts/run_complete_slam_system.sh
-
-# From the CV menu that opens, start YOLO detection:
-# Select: 3) YOLO11 → 1) Detection → Stream mode (5 FPS)
-
-# View results in RViz (opens automatically)
-# - Yellow text labels show detected objects in 3D
-# - TF frames show camera pose and object locations
-# - TSDF point cloud shows 3D reconstruction
-
-# Stop everything
-./scripts/kill_all_slam.sh
-```
-
-### System Health Check
-
-```bash
-# Check all components
-./scripts/test_complete_system.sh
-
-# Debug markers not showing
-./scripts/diagnose_markers.sh
-
-# View command reference
-cat scripts/QUICK_REFERENCE.txt
-```
-
-### Key Topics
-
-```bash
-# Camera pose in world frame
-ros2 topic echo /orb_slam3/pose
-
-# CV detections (YOLO/SAM2/Face)
-ros2 topic echo /cv_pipeline/results
-
-# 3D semantic markers
-ros2 topic echo /semantic/markers
-
-# World state (all tracked objects)
-cat /tmp/world_state.json | python3 -m json.tool
-```
-
-## 🏗️ System Architecture
-
-### UML Class Diagram
-
-```mermaid
-classDiagram
-    class BaseModel {
-        <<abstract>>
-        +device: str
-        +model: Any
-        +loaded: bool
-        +model_name: str
-        +load() bool
-        +process(image, params) Dict
-        +get_supported_modes() List
-        +visualize(image, result, params) ndarray
-        +unload()
-    }
-    
-    class SAM2Model {
-        +predictor: SAM2ImagePredictor
-        +load() bool
-        +process(image, params) Dict
-        +get_supported_modes() List
-        +visualize(image, result, params) ndarray
-        -_process_point(params, w, h) Tuple
-        -_process_box(params, w, h) Tuple
-        -_process_points(params, w, h) Tuple
-        -_process_everything(params, w, h) Tuple
-    }
-    
-    class FastSAMModel {
-        +model: FastSAM
-        +load() bool
-        +process(image, params) Dict
-        +get_supported_modes() List
-        +visualize(image, result, params) ndarray
-    }
-    
-    class YOLO11Model {
-        +models: Dict
-        +load() bool
-        +process(image, params) Dict
-        +get_supported_modes() List
-        +visualize(image, result, params) ndarray
-        -_process_detection(results) Dict
-        -_process_segmentation(results) Dict
-        -_process_pose(results) Dict
-        -_process_obb(results) Dict
-    }
-    
-    class InsightFaceModel {
-        +app: FaceAnalysis
-        +face_db: Dict
-        +load() bool
-        +process(image, params) Dict
-        +get_supported_modes() List
-        +visualize(image, result, params) ndarray
-        -_detect_recognize(image) Dict
-        -_register_face(image, name) Dict
-        -_detect_emotion(image) Dict
-        -_check_liveness(image) Dict
-    }
-    
-    class CVModelManager {
-        +models: Dict~str, BaseModel~
-        +active_model: str
-        +device: str
-        +load_model(model_name) bool
-        +process_request(model_name, image, params) Dict
-        +get_available_models() List
-        +unload_all()
-    }
-    
-    class SAM2ServerV2 {
-        +node: Node
-        +model_manager: CVModelManager
-        +image_sub: Subscription
-        +request_sub: Subscription
-        +result_pub: Publisher
-        +vis_pub: Publisher
-        +streaming: bool
-        +process_request(msg)
-        +image_callback(msg)
-        +start_streaming(params)
-        +stop_streaming()
-    }
-    
-    BaseModel <|-- SAM2Model
-    BaseModel <|-- FastSAMModel
-    BaseModel <|-- YOLO11Model
-    BaseModel <|-- InsightFaceModel
-    
-    CVModelManager "1" *-- "many" BaseModel : manages
-    SAM2ServerV2 "1" *-- "1" CVModelManager : uses
-```
-
-### ROS2 Node Graph
-
-```mermaid
-flowchart TB
-    subgraph Hardware["Hardware Layer"]
-        KINECT[("Kinect v2<br/>RGB-D Sensor")]
-        IMU[("BlueLily<br/>9-axis IMU")]
-    end
-    
-    subgraph ROS2["ROS2 Nodes"]
-        subgraph Drivers["Driver Nodes"]
-            KB[kinect2_bridge_node]
-            BB[bluelily_imu_node]
-        end
-        
-        subgraph SLAM["SLAM Nodes"]
-            RTAB[rtabmap_node]
-            ODOM[rgbd_odometry_node]
-        end
-        
-        subgraph CV["CV Pipeline"]
-            CVS[sam2_server_v2]
-            subgraph Workers["Model Workers"]
-                SAM2W[SAM2Worker]
-                FASTW[FastSAMWorker]
-                YOLOW[YOLO11Worker]
-                INSW[InsightFaceWorker]
-            end
-        end
-    end
-    
-    subgraph Topics["ROS2 Topics"]
-        RGB["kinect2/hd/image_color"]
-        DEPTH["kinect2/hd/image_depth_rect"]
-        POINTS["kinect2/hd/points"]
-        IMUD["bluelily/imu/data"]
-        REQ["cv_pipeline/model_request"]
-        RES["cv_pipeline/results"]
-        VIS["cv_pipeline/visualization"]
-        MAP["rtabmap/map"]
-        ODOMTOPIC["rtabmap/odom"]
-    end
-    
-    subgraph TF["TF2 Frames"]
-        WORLD[world]
-        BASE[base_link]
-        CAMERA[kinect2_link]
-        OPTICAL[kinect2_rgb_optical_frame]
-    end
-    
-    KINECT --> KB
-    IMU --> BB
-    
-    KB --> RGB
-    KB --> DEPTH
-    KB --> POINTS
-    BB --> IMUD
-    
-    RGB --> CVS
-    RGB --> RTAB
-    DEPTH --> RTAB
-    DEPTH --> ODOM
-    IMUD --> RTAB
-    
-    REQ --> CVS
-    CVS --> RES
-    CVS --> VIS
-    
-    CVS --> SAM2W
-    CVS --> FASTW
-    CVS --> YOLOW
-    CVS --> INSW
-    
-    ODOM --> ODOMTOPIC
-    RTAB --> MAP
-    
-    WORLD --> BASE
-    BASE --> CAMERA
-    CAMERA --> OPTICAL
-```
-
-### Data Flow Diagram
-
-```mermaid
-flowchart LR
-    subgraph Input["📥 Input"]
-        K[Kinect v2]
-        B[BlueLily IMU]
-    end
-    
-    subgraph Processing["⚙️ Processing"]
-        direction TB
-        BRIDGE[kinect2_bridge]
-        CVPIPE[CV Pipeline Server]
-        RTAB[RTABMap SLAM]
-        
-        subgraph Models["AI Models"]
-            M1[SAM2]
-            M2[FastSAM]
-            M3[YOLO11]
-            M4[InsightFace]
-        end
-    end
-    
-    subgraph Output["📤 Output"]
-        VIZ[RViz Visualization]
-        JSON[JSON Results]
-        MAP[3D Map]
-        TF[TF Transforms]
-    end
-    
-    K -->|USB 3.0| BRIDGE
-    B -->|Serial| BRIDGE
-    
-    BRIDGE -->|RGB-D| CVPIPE
-    BRIDGE -->|RGB-D + IMU| RTAB
-    
-    CVPIPE --> M1
-    CVPIPE --> M2
-    CVPIPE --> M3
-    CVPIPE --> M4
-    
-    M1 --> JSON
-    M2 --> JSON
-    M3 --> JSON
-    M4 --> JSON
-    
-    CVPIPE --> VIZ
-    RTAB --> MAP
-    RTAB --> TF
-    MAP --> VIZ
-```
-
-### Package Structure
-
-```mermaid
-graph TB
-    subgraph WS["ros2_ws/src"]
-        subgraph K2["kinect2_ros2_cuda"]
-            KB2[kinect2_bridge]
-            KC[kinect2_calibration]
-            KR[kinect2_registration]
-        end
-        
-        subgraph CV["cv_pipeline"]
-            CVN[cv_pipeline_node.cpp]
-            CVM[cv_model_manager.py]
-            SVR[sam2_server_v2.py]
-            SW[sam2_worker.py]
-            IW[insightface_worker.py]
-        end
-        
-        subgraph BL["bluelily_bridge"]
-            BLN[bluelily_imu_node.cpp]
-        end
-        
-        subgraph SL["kinect2_slam"]
-            SLC[SLAM Config]
-        end
-    end
-    
-    K2 --> CV
-    BL --> SL
-    CV --> SL
-```
-
-## � QuCick Start
-
-### Prerequisites
-```bash
-# System Requirements
-- Ubuntu 22.04 LTS
-- ROS2 Humble
-- NVIDIA GPU with CUDA 12.6+
-- Microsoft Kinect v2
-- 8GB+ RAM
-- Anaconda/Miniconda
-```
-
-### Installation
-
-1. **Clone Repository**
-```bash
-git clone https://github.com/AryanRai/HowYouSeeMe.git
-cd HowYouSeeMe
-```
-
-2. **Install Dependencies**
-```bash
-# Install Kinect v2 drivers
-./install_kinect_drivers.sh
-
-# Install ROS2 packages
-cd ros2_ws
-colcon build
-source install/setup.bash
-
-# Install AI models (in conda environment)
-conda activate howyouseeme
-./install_sam2.sh
-./install_fastsam.sh
-./install_yolo11.sh
-./install_insightface.sh
-```
-
-3. **Launch System**
-```bash
-# Full system (Kinect + SLAM + CV Pipeline + RViz)
-./launch_full_system_rviz.sh
-
-# Or just Kinect + CV Pipeline
-./launch_kinect_sam2_server.sh
-```
-
-4. **Use Interactive Menu**
-```bash
-./cv_menu.sh
-```
-
-## 📖 Documentation
-
-### Quick Start Guides
-- [Getting Started](docs/Getting_Started.md) - First-time setup
-- [Quick Start CV Pipeline](docs/QUICK_START_CV_PIPELINE.md) - CV system basics
-- [CV Pipeline V2 Guide](docs/CV_PIPELINE_V2_GUIDE.md) - Complete pipeline documentation
-
-### Hardware Setup
-- [Kinect v2 ROS2 Bridge](docs/Kinect2_ROS2_Bridge_Setup.md) - Sensor setup and calibration
-- [Kinect v2 ROS Humble](docs/KinectV2RosHumble.md) - ROS2 integration details
-
-### SLAM & Navigation
-- [SLAM Quick Reference](docs/SLAM_QUICK_REFERENCE.md) - RTABMap commands
-- [SLAM Integration](docs/Kinect_SLAM_Integration.md) - Full SLAM setup
-- [SLAM Performance](docs/SLAM_Performance_Optimization.md) - Optimization tips
-
-### AI Models
-- [SAM2 Integration](docs/SAM2_SUCCESS.md) - Segmentation model
-- [FastSAM Guide](docs/fastsam.md) - Fast segmentation
-- [YOLO11 Integration](docs/YOLO11_INTEGRATION.md) - Detection and pose
-- [InsightFace Complete](docs/INSIGHTFACE_COMPLETE_SUMMARY.md) - Face recognition
-- [Emotion Detection](docs/EMOTION_DETECTION_COMPLETE.md) - Emotion analysis
-
-### System Guides
-- [Menu Guide](docs/MENU_GUIDE.md) - Interactive menu usage
-- [Streaming Guide](docs/STREAMING_FIX.md) - Continuous streaming
-- [Troubleshooting](docs/CV_PIPELINE_TROUBLESHOOTING.md) - Common issues
-- [RViz Visualization](docs/RVIZ_VISUALIZATION_GUIDE.md) - Visualization setup
-
-## 🎯 Usage Examples
-
-### 1. SAM2 Segmentation
-```bash
-# Point mode - segment object at coordinates
-ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-    "data: 'sam2:prompt_type=point,x=480,y=270'"
-
-# Box mode - segment region
-ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-    "data: 'sam2:prompt_type=box,box=200,150,700,450'"
-
-# Everything mode - segment all objects
-ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-    "data: 'sam2:prompt_type=everything'"
-
-# Streaming mode
-ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-    "data: 'sam2:prompt_type=point,x=480,y=270,stream=true,duration=30,fps=5'"
-```
-
-### 2. YOLO11 Detection
-```bash
-# Object detection
-ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-    "data: 'yolo11:task=detect,conf=0.25'"
-
-# Pose estimation
-ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-    "data: 'yolo11:task=pose,conf=0.25'"
-
-# Instance segmentation
-ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-    "data: 'yolo11:task=segment,conf=0.25'"
-```
-
-### 3. Face Recognition
-```bash
-# Detect and recognize faces
-ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-    "data: 'insightface:mode=detect_recognize'"
-
-# Register new person
-ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-    "data: 'insightface:mode=register,name=John_Doe'"
-
-# Check liveness (anti-spoofing)
-ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-    "data: 'insightface:mode=liveness'"
-```
-
-### 4. Emotion Detection
-```bash
-# Single frame emotion detection
-ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-    "data: 'insightface:mode=emotion'"
-
-# Stream emotions continuously
-ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-    "data: 'insightface:mode=emotion,stream=true,duration=30,fps=5'"
-```
-
-### 5. FastSAM with Text
-```bash
-# Segment using text description
-ros2 topic pub --once /cv_pipeline/model_request std_msgs/msg/String \
-    "data: 'fastsam:prompt_type=text,text=a photo of a dog'"
-```
-
-## 🔧 System Commands
-
-### Launch Scripts
-```bash
-# Robot Head - Complete system with IMU fusion
-./launch_robot_head.sh
-
-# Full system with visualization (no IMU)
-./launch_full_system_rviz.sh
-
-# Kinect + CV Pipeline only
-./launch_kinect_sam2_server.sh
-
-# SLAM with IMU (legacy)
-./launch_kinect2_slam_with_imu.sh
-```
-
-### Utility Scripts
-```bash
-# Interactive menu
-./cv_menu.sh
-
-# Test BlueLily IMU
-python3 test_bluelily_connection.py
-./test_bluelily_ros2.sh
-
-# Stop all processes
-./kill_all.sh
-
-# Stop streaming
-./stop_cv_streaming.sh
-
-# Test emotion detection
-./test_emotion_detection.sh
-```
-
-### Monitoring
-```bash
-# View results
-ros2 topic echo /cv_pipeline/results
-
-# Watch visualization
-# In RViz: Add Image display for /cv_pipeline/visualization
-
-# Monitor performance
-ros2 topic hz /cv_pipeline/results
-```
-
-## 📊 Performance
-
-### Processing Times
-- **SAM2 Tiny**: ~0.7s per frame (0.28GB VRAM)
-- **YOLO11**: ~0.1-0.3s per frame
-- **InsightFace**: ~0.3-0.5s per frame
-- **Emotion Detection**: ~0.5s per frame
-- **FastSAM**: ~0.2-0.4s per frame
-
-### Streaming Performance
-- **Recommended FPS**: 2-5 for AI models
-- **Kinect FPS**: 14.5 (RGB-D)
-- **SLAM Update Rate**: 1 Hz
-- **GPU Memory**: 0.28-2GB depending on model
-
-### System Resources
-- **RAM Usage**: 4-8GB
-- **GPU Memory**: 2-4GB (with all models loaded)
-- **CPU Usage**: 30-50% (4 cores)
-
-## 🛠️ Development
-
-### Project Structure
-```
-HowYouSeeMe/
-├── ros2_ws/                    # ROS2 workspace
-│   └── src/
-│       ├── cv_pipeline/        # CV Pipeline package
-│       │   └── python/         # AI model workers
-│       ├── kinect2_ros2_cuda/  # Kinect bridge
-│       └── bluelily_bridge/    # IMU integration
-├── docs/                       # Documentation
-├── BlueLily/                   # IMU firmware
-├── scripts/                    # Utility scripts
-├── launch_*.sh                 # Launch scripts
-├── cv_menu.sh                  # Interactive menu
-└── README.md                   # This file
-```
-
-### Adding New Models
-See [ADD_NEW_MODEL_GUIDE.md](ros2_ws/src/cv_pipeline/python/ADD_NEW_MODEL_GUIDE.md) for instructions on integrating new AI models.
-
-### Key Components
-- **cv_model_manager.py**: Model loading and management
-- **sam2_server_v2.py**: Main CV pipeline server
-- **sam2_worker.py**: SAM2 model worker
-- **yolo11_worker.py**: YOLO11 model worker
-- **insightface_worker.py**: Face recognition and emotion detection
-- **fastsam_worker.py**: FastSAM model worker
-
-## 🎓 Features in Detail
-
-### Streaming Support
-All models support continuous streaming:
-- **Duration**: Set in seconds or -1 for continuous
-- **FPS**: Configurable 1-30 FPS
-- **Stop Command**: Instant stop without restart
-- **Model Switching**: Switch between models during streaming
-
-### Visualization
-- **RViz Integration**: Real-time visualization
-- **Color-Coded Results**: Different colors for different detections
-- **Bounding Boxes**: Object and face detection
-- **Segmentation Masks**: Transparent overlays
-- **Emotion Colors**: Color-coded emotions
-- **Pose Keypoints**: Human skeleton visualization
-
-### Face Database
-- **Persistent Storage**: Face embeddings saved to disk
-- **Multiple Samples**: Register multiple images per person
-- **Metadata Tracking**: Names, timestamps, encounter counts
-- **Similarity Threshold**: Configurable recognition threshold
-
-### SLAM Features
-- **3D Mapping**: Real-time point cloud generation
-- **Loop Closure**: Automatic map correction
-- **Odometry**: Visual-inertial odometry
-- **Localization**: 6-DOF pose estimation
-- **Map Saving**: Persistent map storage
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Server not starting?**
-```bash
-# Check if processes are running
-ps aux | grep sam2_server
-
-# Kill existing processes
-./kill_all.sh
-
-# Restart
-./launch_kinect_sam2_server.sh
-```
-
-**Models not loading?**
-```bash
-# Activate conda environment
-conda activate howyouseeme
-
-# Reinstall models
-./install_sam2.sh
-./install_insightface.sh
-```
-
-**Kinect not detected?**
-```bash
-# Check USB connection
-lsusb | grep Xbox
-
-# Restart udev rules
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-```
-
-**CUDA errors?**
-```bash
-# Check CUDA installation
-nvidia-smi
-
-# Verify CUDA version
-nvcc --version
-```
-
-See [CV_PIPELINE_TROUBLESHOOTING.md](docs/CV_PIPELINE_TROUBLESHOOTING.md) for more solutions.
-
-## 🔮 Roadmap
-
-### ✅ Completed (Current Status)
-- [x] Kinect v2 ROS2 bridge with CUDA
-- [x] RTABMap SLAM integration
-- [x] SAM2 segmentation (Meta SAM2)
-- [x] FastSAM with text prompts
-- [x] YOLO11 multi-task detection
-- [x] InsightFace face recognition
-- [x] Emotion detection (7 emotions via FER)
-- [x] Interactive menu system
-- [x] Streaming support for all models
-- [x] RViz visualization
-- [x] BlueLily IMU integration (ROS2 bridge)
-- [x] Robot head assembly (3D printed structure)
-- [x] Serial communication with BlueLily (800 Hz)
-- [x] Coordinate frame fixes
-
-### 🚧 Short Term (In Progress)
-- [x] **BlueLily ROS2 bridge** - IMU data streaming ✅
-- [ ] **Test IMU fusion with SLAM** - Validate improved localization
-- [ ] **Calibrate IMU-Camera** - Align coordinate frames
-- [ ] **Fix SLAM and Kinect driver** - Stability improvements
-- [ ] **Hand gesture detection** - MediaPipe or custom model
-- [ ] **MCP Server** - Model Context Protocol for LLM integration
-- [ ] **Depth + Segmentation fusion** - Combine depth with masks
-- [ ] **3D world position estimation** - Mark YOLO objects on SLAM map
-- [ ] **Gaze detection** - Eye tracking integration
-- [ ] **OCR tool** - Text detection and recognition
-
-### 🎯 Medium Term
-- [ ] **World State Summarizer** - Unified interface combining all models
-- [ ] **Visual Memory System** - Remember object locations on SLAM map
-- [ ] **Event-based checkpointing** - Save frames when humans/objects detected
-- [ ] **Async processing** - Process past frames in background
-- [ ] **Object highlighting** - Highlight objects/rooms when discussing
-- [ ] **Meta SAM3** - Upgrade to latest segmentation model
-- [ ] **Depth Anything** - Advanced depth estimation
-- [ ] **DINO features** - Self-supervised feature extraction
-
-### 🔮 Long Term Vision
-- [ ] **Fix Kinect CUDA bridge** - Full GPU acceleration
-- [ ] **Extensible model pipeline** - Custom sequential model chains
-- [ ] **Condition-based pipelines** - Dynamic model activation
-- [ ] **Gaussian splatting** - 3D scene reconstruction
-- [ ] **NVBLOX integration** - Real-time 3D mapping
-- [ ] **LightGlue ONNX** - Feature matching
-- [ ] **Multi-camera support** - Sensor fusion
-- [ ] **Web interface** - Remote monitoring
-- [ ] **Mobile app** - Control and visualization
-
-### 🧠 Intelligent Features
-- [ ] **On-demand model loading** - Only run required models
-- [ ] **Always-on SLAM** - Continuous mapping
-- [ ] **Selective object detection** - Run YOLO when needed
-- [ ] **LLM-driven activation** - Models triggered by natural language
-- [ ] **Spatial memory queries** - "Where did I see the apple?"
-- [ ] **Object persistence** - Track objects across frames
-- [ ] **Scene understanding** - Semantic room mapping
-
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests and documentation
-5. Submit a pull request
-
-### Development Guidelines
-- Follow PEP 8 for Python code
-- Add docstrings to all functions
-- Update documentation for new features
-- Test with real Kinect hardware
-- Ensure ROS2 compatibility
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## 🤖 Robot Head Assembly
-
-HowYouSeeMe is deployed in a **3D-printed robot head** structure integrating:
-- **Kinect v2** - Front-facing RGB-D sensor
-- **BlueLily IMU** - Internal 9-axis inertial measurement unit
-- **Jetson/Laptop** - Main compute platform (top-mounted)
-- **Display Screen** - Visual feedback (top-mounted)
-
-### BlueLily IMU Integration ✅
-**Status**: Fully integrated and streaming at 800 Hz
-
-- **9-axis IMU** (MPU6500) for enhanced SLAM localization
-- **Real-time sensor fusion** with Kinect RGB-D data
-- **Reduced drift** in SLAM through IMU corrections (<1% vs 3-5%)
-- **ROS2 bridge** publishing to `/imu/data` topic
-- **Serial communication** via `/dev/ttyACM0` at 115200 baud
-
-See [Robot Head Setup](docs/ROBOT_HEAD_SETUP.md) and [BlueLily Integration](BLUELILY_INTEGRATION_COMPLETE.md) for details.
-
-### Architecture Philosophy
-1. **On-Demand Processing**: Models load only when needed to conserve resources
-2. **Always-On SLAM**: Continuous mapping for spatial awareness
-3. **Selective Detection**: YOLO runs based on context and requirements
-4. **LLM Integration**: Natural language control via MCP server
-5. **Visual Memory**: Persistent object tracking on SLAM map
-6. **Event-Driven**: Checkpoint frames when significant events occur
-
-### Future Ecosystem
-- **DroidCore**: Central robotics platform
-- **Ally**: LLM-based cognitive system
-- **Comms**: Multi-protocol communication layer
-- **World State API**: Unified perception interface
-
-## 🙏 Acknowledgments
-
-- **Meta AI** - SAM2 model
-- **Ultralytics** - YOLO11 and FastSAM
-- **InsightFace** - Face recognition models
-- **FER** - Emotion detection
-- **RTABMap** - SLAM implementation
-- **ROS2 Community** - Robotics framework
-- **NVIDIA** - CUDA acceleration and NVBLOX
-
-## 📧 Contact
-
-- **Email**: buzzaryanrai@gmail.com
-- **GitHub**: [@AryanRai](https://github.com/AryanRai)
-- **Issues**: [GitHub Issues](https://github.com/AryanRai/HowYouSeeMe/issues)
-
-## 🌟 Star History
-
-If you find this project useful, please consider giving it a star! ⭐
+The navigation stack takes a semantic goal (a natural-language description, a named memory, or exact 3D coordinates) and resolves it into a path using an RRT* global planner over the NVBLOX ESDF and a DWA local planner for real-time obstacle avoidance. If the target object has never been seen, the robot enters visual search mode: it sweeps the room while scoring each frame with YOLO confidence and CLIP similarity against a visual description of the target, then back-projects the first confident detection to 3D and pathplans precisely to it. Between active sessions, a sleep-time pipeline runs OpenSplat on accumulated keyframes to produce a Gaussian splat that replaces the sparser TSDF background on the next wakeup, improving map quality passively over time.
 
 ---
 
-**Built with ❤️ for advanced computer vision and robotics**
+## Hardware
 
-*Last Updated: November 2024*
+| Component       | Part                        | Interface             |
+|-----------------|-----------------------------|-----------------------|
+| RGB-D camera    | Microsoft Kinect v2         | USB 3.0               |
+| IMU             | BlueLily (MPU6500)          | /dev/ttyACM0 115200   |
+| Compute (dev)   | RTX 3050 laptop, Ubuntu 22  | CUDA 12.x             |
+| Compute (robot) | Jetson AGX Orin 64GB        | JetPack 6 `[PLANNED]` |
+
+---
+
+## System Architecture
+
+### The 5 tiers
+
+**Tier 1 — Always on**
+
+ORB-SLAM3 (pose + map), YOLO11 (object detection), event checkpointer.
+These three nodes run continuously. Nothing in this tier is ever killed.
+VRAM cost: ~1 GB. CPU: 3–4 cores.
+
+**Tier 2 — Event-driven**
+
+Async frame analyser, SAM2 (precise masks), InsightFace (face ID), FER (emotion).
+Spawned when triggered by Tier 1 events, killed when idle.
+Only run when a checkpoint justifies the compute cost.
+
+**Tier 3 — World synthesis**
+
+World synthesiser (merges all perception into `world_state.json` every 3 s).
+Named memory store (persistent object location tracking).
+
+**Tier 4 — Persistence**
+
+```
+/tmp/stm/                                        short-term checkpoint memory
+/tmp/world_state.json                            live world model
+~/howyouseeme_persistent/named_memories.json     survives reboots
+```
+
+**Tier 5 — Interface**
+
+- MCP server (port 8090) — LLM tool interface
+- RViz semantic overlay — live visualisation
+- Rerun logger — timeline recording and session replay
+- Ally integration — voice + chat interface via Robot Mode
+
+### Navigation stack `[PLANNED/WIP]`
+
+```
+Semantic goal resolver → RRT* global planner → DWA local planner → /cmd_vel
+Visual search mode for unknown objects (YOLO + CLIP + optional web image fetch)
+```
+
+### Sleep-time map enhancement `[PLANNED]`
+
+```
+Keyframe exporter → sleep detector → OpenSplat Gaussian splat → splat loader
+Runs offline while robot is idle. Improves map quality each session.
+```
+
+---
+
+## Key ROS 2 Topics
+
+| Topic                          | Type             | Publisher            | Hz     |
+|-------------------------------|------------------|----------------------|--------|
+| /kinect2/hd/image_color        | Image            | kinect2_bridge       | 14.5   |
+| /kinect2/hd/image_depth_rect   | Image            | kinect2_bridge       | 14.5   |
+| /imu/data                      | Imu              | bluelily_bridge      | 800    |
+| /orb_slam3/pose                | PoseStamped      | orb_slam3            | 14.5   |
+| /tsdf/pointcloud               | PointCloud2      | tsdf_integrator      | 1      |
+| /splat/background              | PointCloud2      | splat_loader         | 0.1    |
+| /cv_pipeline/results           | String (JSON)    | yolo_node            | 14.5   |
+| /semantic/markers              | MarkerArray      | semantic_projection  | 0.3    |
+| /semantic/world_state          | String (JSON)    | world_synthesiser    | 0.3    |
+| /memory/checkpoint_saved       | String           | event_checkpointer   | event  |
+| /memory/updated                | String           | named_memory_node    | event  |
+| /robot/sleeping                | Bool             | sleep_detector       | event  |
+| /navigation/status             | String (JSON)    | navigation_manager   | 1      |
+| /navigation/path               | Path             | rrt_star_planner     | event  |
+| /cmd_vel                       | Twist            | dwa_local_planner    | 10     |
+
+---
+
+## MCP Tools
+
+All tools exposed at `http://localhost:8090/mcp`
+
+| Tool                  | Description                                                        |
+|-----------------------|--------------------------------------------------------------------|
+| query_world           | Returns full world state — objects, people, events                 |
+| where_is(label)       | Last known 3D position of any object or person                     |
+| remember_object       | Pin an object for persistent tracking                              |
+| recall_memory         | Get a pinned object's current confirmed location                   |
+| forget_memory         | Stop tracking a named memory                                       |
+| get_recent_events     | Last N perception events with timestamps                           |
+| get_checkpoint        | Full metadata for a specific checkpoint event                      |
+| get_camera_frame      | Latest RGB frame as base64 JPEG for vision LLMs                    |
+| get_robot_status      | Natural language summary of robot state                            |
+| get_robot_context     | System prompt context block for Ally Robot Mode                    |
+| navigate_to(query)    | Pathfind to object/room described in natural language              |
+| navigate_to_pose      | Pathfind to exact 3D coordinates                                   |
+| cancel_navigation     | Stop robot immediately                                             |
+| navigation_status     | Current nav state, goal, progress, ETA                             |
+
+---
+
+## AI Models
+
+| Model        | Purpose                    | Tier | VRAM    | When active   |
+|--------------|----------------------------|------|---------|---------------|
+| YOLO11       | Object detection           | 1    | ~400 MB | Always        |
+| SAM2 tiny    | Precise segmentation       | 2    | ~280 MB | On event      |
+| InsightFace  | Face identification        | 2    | ~200 MB | Person event  |
+| FER          | Emotion detection          | 2    | ~150 MB | Person event  |
+| FastSAM      | Fast segmentation          | 2    | ~200 MB | On demand     |
+| CLIP         | Visual search matching     | nav  | ~200 MB | Visual search |
+| TensorRT     | YOLO acceleration          | opt  | —       | If exported   |
+
+Total peak (all active): ~1.43 GB VRAM — fits on 4 GB with headroom.
+
+---
+
+## Navigation `[PLANNED/WIP]`
+
+### Goal types
+
+- **Named memory**: "my keys" → direct pathplan to pinned location
+- **Known object**: "cup" → last seen position from `world_state.json`
+- **Room label**: "kitchen" → SLAM map room centroid
+- **Unknown object**: "3D printer" → visual search mode
+
+### Visual search mode
+
+For objects never seen before:
+1. LLM generates visual description of target
+2. Optionally fetch reference image from web (SerpAPI or LLM-suggested URL)
+3. Robot sweeps room — rotate in place, then expanding spiral
+4. Each frame scored: YOLO confidence + CLIP similarity vs description
+5. On detection: back-project to 3D, save named memory, pathplan precisely
+
+### Planners
+
+- **Global**: RRT* on NVBLOX ESDF (falls back to A* on 2D occupancy if no ESDF)
+- **Local**: DWA — samples velocity commands, scores by heading + clearance + speed
+- **Replan**: triggered when obstacle appears within 0.15 m of planned path
+
+---
+
+## Sleep-time Map Enhancement `[PLANNED]`
+
+While the robot is idle (no sensor activity for 60 s):
+1. Keyframe exporter has been saving RGB frames + ORB-SLAM3 poses to disk
+2. Sleep detector fires, launches OpenSplat on accumulated keyframes
+3. OpenSplat runs overnight at `--resolution 2 --iters 5000` on robot GPU
+4. Finished `.ply` splat loaded as `/splat/background` on next wakeup
+5. Splat improves progressively — better map quality each sleep cycle
+6. RViz layers: splat base → live TSDF → semantic markers → robot pose
+
+---
+
+## Ally Integration `[PLANNED/WIP]`
+
+Ally (https://github.com/[your-ally-repo]) is the human-facing interface.
+HowYouSeeMe registers as an MCP server in Ally's Robot Mode.
+
+**What Ally can do when connected:**
+
+> Voice: "What can you see right now?"
+> → `query_world` → describes all detected objects with 3D positions
+
+> Voice: "Go find the 3D printer"
+> → `navigate_to("3D printer")` → visual search → pathplan → arrive
+
+> Voice: "Remember where the apple is"
+> → `remember_object` → YOLO watches for apple → pins location on detection
+
+> Voice: "Show me what you see"
+> → `get_camera_frame` → base64 JPEG → vision LLM describes scene
+
+Connection: `http://localhost:8090/mcp`
+Robot Mode toggle in Ally automatically injects robot status as system context.
+
+---
+
+## Visualisation
+
+### RViz (live operation)
+
+Displays: TSDF point cloud, splat background, semantic labels, robot pose, navigation path, goal markers.
+
+### Rerun (debugging + session replay)
+
+Records all streams with timestamps. Scrub back to any moment and see exactly what the robot perceived — RGB, depth, YOLO detections, pose, world state — all synced.
+
+```bash
+pip install rerun-sdk --break-system-packages
+# Sessions saved to ~/howyouseeme_sessions/session_<date>.rrd
+rerun ~/howyouseeme_sessions/session_latest.rrd
+```
+
+---
+
+## Compute Targets
+
+| Platform              | Status      | Notes                                                                   |
+|-----------------------|-------------|-------------------------------------------------------------------------|
+| RTX 3050 laptop       | `[DONE]`    | Development platform, 4 GB VRAM ceiling                                 |
+| Jetson AGX Orin 64GB  | `[PLANNED]` | Target robot platform, 64 GB unified memory                             |
+| Isaac ROS migration   | `[PLANNED]` | cuVSLAM + NVBLOX replace current SLAM/TSDF. Same codebase, one CMake flag change |
+
+---
+
+## Phase Implementation Status
+
+| Feature                                   | Status      | Notes                                                         |
+|-------------------------------------------|-------------|---------------------------------------------------------------|
+| Phase 1 — IMU-camera calibration (Kalibr) | `[WIP]`     | IMU disabled for now, identity transform placeholder          |
+| Phase 2 — ORB-SLAM3 RGB-D                 | `[DONE]`    | Running without IMU fusion, visual-only mode                  |
+| Phase 3 — Open3D TSDF integrator node     | `[DONE]`    | `tsdf_integrator_node.py`, 1 Hz map update on CPU             |
+| Phase 4 — Semantic projection node        | `[DONE]`    | YOLO detections back-projected to 3D; floating labels in RViz via `/semantic/markers` |
+| Tier 1–5 memory system                    | `[WIP]`     | Event checkpointer done; async analyser in progress; world synthesiser in progress; named memory store planned; MCP server planned |
+| Sleep-time Gaussian splat pipeline        | `[PLANNED]` | Keyframe exporter, sleep detector, OpenSplat launcher, splat loader all designed, not yet implemented |
+| Navigation stack                          | `[PLANNED]` | RRT*, DWA, semantic resolver, visual search all designed      |
+| Ally integration                          | `[PLANNED]` | MCP server must be running first                              |
+| Rerun visualisation                       | `[WIP]`     | Logger node written, not yet in launch file                   |
+| Isaac ROS migration                       | `[PLANNED]` | Pending Jetson AGX Orin hardware purchase                     |
+
+---
+
+## Quick Start
+
+```bash
+# Dependencies
+sudo apt install ros-humble-desktop ros-humble-cv-bridge
+pip install open3d ultralytics rerun-sdk --break-system-packages
+
+# Build
+cd ros2_ws && colcon build
+source install/setup.bash
+
+# Launch full stack
+ros2 launch kinect2_slam howyouseeme_full.launch.py
+
+# MCP server (separate terminal)
+python3 ros2_ws/src/kinect2_slam/python/mcp_server.py
+
+# Visualisation (separate terminal)
+ros2 launch kinect2_slam rviz.launch.py
+# or for Rerun:
+rerun  # viewer opens automatically when logger node starts
+```
+
+---
+
+## Repo Structure
+
+```
+HowYouSeeMe/
+├── ros2_ws/src/
+│   ├── kinect2_ros2_cuda/        Kinect v2 ROS 2 bridge — do not modify
+│   ├── bluelily_bridge/          IMU serial bridge
+│   │   └── python/
+│   │       └── bluelily_imu_node.py
+│   ├── cv_pipeline/              AI model nodes
+│   │   └── python/
+│   │       ├── yolo_node.py
+│   │       ├── sam2_service_node.py
+│   │       ├── insightface_service_node.py
+│   │       ├── semantic_projection_node.py
+│   │       └── visual_search_node.py
+│   └── kinect2_slam/             Core SLAM and memory system
+│       ├── launch/
+│       │   └── howyouseeme_full.launch.py
+│       └── python/
+│           ├── tsdf_integrator_node.py
+│           ├── event_checkpointer_node.py
+│           ├── async_analyser_node.py
+│           ├── world_synthesiser_node.py
+│           ├── named_memory_node.py
+│           ├── keyframe_exporter_node.py
+│           ├── sleep_detector_node.py
+│           ├── splat_loader_node.py
+│           ├── rerun_logger_node.py
+│           ├── navigation_manager_node.py
+│           ├── rrt_star_planner.py
+│           ├── dwa_local_planner.py
+│           ├── semantic_goal_resolver.py
+│           └── web_image_fetcher.py
+├── scripts/
+│   ├── run_opensplat.sh
+│   └── merge_splats.py
+├── BlueLily/                     IMU firmware — do not modify
+├── mcp_server.py                 MCP HTTP server on :8090
+└── README.md
+```
+
+---
+
+## Related Projects
+
+- **Ally** — https://github.com/[your-ally-repo]
+  Desktop AI overlay, Robot Mode connects to HowYouSeeMe via MCP
+
+- **DroidCore** — [link if public]
+  Full robot control stack that HowYouSeeMe feeds into
+
+---
+
+## Research Context
+
+This system implements concepts from:
+
+- **ConceptFusion (2023)** — language-embedded 3D maps
+- **SayPlan (2023)** — LLM task planning via 3D scene graphs
+- **HomeRobot (Meta, 2023)** — open vocabulary mobile manipulation
+- **OpenScene / LERF** — queryable neural scene representations
+
+The specific combination of modular on-demand model loading, sleep-time Gaussian splat densification, MCP as the LLM-robot interface standard, and persistent named spatial memory as an open deployable system is the novel contribution of this project.
