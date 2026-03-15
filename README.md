@@ -38,6 +38,18 @@ When the robot sleeps, OpenSplat runs on the accumulated keyframes and produces 
 
 ---
 
+## Screenshots
+
+| ORB-SLAM3 live tracking | RViz semantic map |
+|---|---|
+| ![ORB-SLAM3](images/orbslam.png) | ![RViz](images/rviz.png) |
+
+| Person detection + face recognition | Object detection (bedroom) |
+|---|---|
+| ![Person](images/person.png) | ![Bedroom](images/bed.png) |
+
+---
+
 ## Spatial perception for AI
 
 Most AI systems treat space as flat. An image is a grid of pixels. A document is a sequence of tokens. There's no inherent sense of *where* things are relative to each other in 3D, no memory of where something was yesterday, no ability to say "the cup is on the table to the left of the laptop, about 80cm away."

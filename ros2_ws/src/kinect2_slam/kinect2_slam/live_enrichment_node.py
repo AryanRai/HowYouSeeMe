@@ -142,7 +142,10 @@ class LiveEnrichmentNode(Node):
 
     def _enrich(self, img: np.ndarray, detections: list) -> None:
         try:
-            rgb = img[:, :, ::-1].copy() if img.shape[2] == 3 else img
+            # img from _ros_image_to_numpy is RGB (rgb8 encoding)
+            # YOLO expects RGB, InsightFace expects BGR
+            rgb = img  # RGB for YOLO
+            bgr = img[:, :, ::-1].copy()  # BGR for InsightFace / OpenCV
 
             has_person = any(d['label'] == 'person' for d in detections)
             enriched = {
@@ -193,9 +196,14 @@ class LiveEnrichmentNode(Node):
             if has_person:
                 try:
                     worker = _get_insightface()
-                    result = worker.process(rgb, {'mode': 'analyze'})
+                    # InsightFace expects BGR uint8
+                    bgr = rgb[:, :, ::-1].copy() if rgb.shape[2] == 3 else rgb
+                    result = worker.process(bgr, {'mode': 'analyze'})
                     enriched['faces'] = result.get('faces', [])
-                    self.get_logger().info(f'InsightFace: {len(enriched["faces"])} faces')
+                    self.get_logger().info(
+                        f'InsightFace: {len(enriched["faces"])} faces '
+                        f'(img={bgr.shape[1]}x{bgr.shape[0]})'
+                    )
                 except ImportError:
                     pass  # Not available in this env
                 except Exception as e:
